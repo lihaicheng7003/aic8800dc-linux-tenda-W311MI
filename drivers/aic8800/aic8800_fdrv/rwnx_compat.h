@@ -36,6 +36,13 @@
 #include <linux/bitfield.h>
 #endif
 
+/* in_irq() was deprecated in Linux 5.10 in favor of in_hardirq() and the
+ * compat alias was removed in Linux 6.19. Provide a shim on 6.19+ so the
+ * driver's existing in_irq() call sites keep building. */
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 19, 0)
+#define in_irq() in_hardirq()
+#endif
+
 /* CFG80211 */
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 20, 0)
 #define IEEE80211_HE_MAC_CAP3_MAX_AMPDU_LEN_EXP_MASK IEEE80211_HE_MAC_CAP3_MAX_A_AMPDU_LEN_EXP_MASK

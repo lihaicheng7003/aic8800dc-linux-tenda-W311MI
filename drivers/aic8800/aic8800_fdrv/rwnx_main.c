@@ -2847,10 +2847,10 @@ static struct rwnx_vif *rwnx_interface_add(struct rwnx_hw *rwnx_hw,
     else {
 #if LINUX_VERSION_CODE > KERNEL_VERSION(5, 17, 0)
         unsigned char mac_addr[6];
-        
+
         memcpy(mac_addr, rwnx_hw->wiphy->perm_addr, ETH_ALEN);
         mac_addr[5] ^= vif_idx;
-        memcpy(ndev->dev_addr, mac_addr, ETH_ALEN);
+        eth_hw_addr_set(ndev, mac_addr);
         memcpy(vif->wdev.address, ndev->dev_addr, ETH_ALEN);
 #else
         memcpy(ndev->dev_addr, rwnx_hw->wiphy->perm_addr, ETH_ALEN);
