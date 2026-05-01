@@ -1,9 +1,12 @@
 #!/bin/bash
 
-set -e
+# Bail on any error AND on any unset variable. The latter guards against a
+# future edit that accidentally blanks PACKAGE_VERSION/SRC_DIR/etc., which
+# would otherwise let `rm -rf "${SRC_DIR}"` expand to a wrong path.
+set -eu
 
 PACKAGE_NAME="aic8800dc"
-PACKAGE_VERSION="6.4.3.0-patched.1"
+PACKAGE_VERSION="6.4.3.0-patched.2"
 SRC_DIR="/usr/src/${PACKAGE_NAME}-${PACKAGE_VERSION}"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
@@ -46,19 +49,42 @@ fi
 echo "[1/5] Installing firmware and udev rules..."
 cp -rf "${SCRIPT_DIR}/fw/aic8800DC" /lib/firmware/
 cp "${SCRIPT_DIR}/tools/aic.rules" /etc/udev/rules.d/
-udevadm trigger
+# Reload first so the daemon picks up the new aic.rules, then trigger so
+# already-attached devices re-evaluate against the new rules. Doing it the
+# other way round fires the trigger with stale rules.
 udevadm control --reload
+udevadm trigger
 if [ -L /dev/aicudisk ]; then
     eject /dev/aicudisk || true
 fi
 
 # --- Prepare DKMS source tree ---
+# Remove every previously registered version (not just the same version)
+# before installing the new one. Otherwise upgrading patched.1 -> patched.2
+# leaves the old DKMS entry, source tree, and .ko lingering on disk.
+# Parsing covers both dkms 3.x ('aic8800dc/<ver>, ...') and dkms 2.x
+# ('aic8800dc, <ver>, ...') output formats; same regex pair as uninstall.sh.
 echo "[2/5] Preparing DKMS source tree..."
-if dkms status -m "${PACKAGE_NAME}" -v "${PACKAGE_VERSION}" 2>/dev/null | grep -q .; then
-    echo "  Removing existing DKMS registration..."
-    dkms remove -m "${PACKAGE_NAME}" -v "${PACKAGE_VERSION}" --all || true
+old_versions="$(dkms status -m "${PACKAGE_NAME}" 2>/dev/null \
+                | sed -n \
+                    -e "s@^${PACKAGE_NAME}/\([^,:]*\)[,:].*@\1@p" \
+                    -e "s@^${PACKAGE_NAME}, \([^,:]*\)[,:].*@\1@p" \
+                | sort -u)"
+if [ -n "${old_versions}" ]; then
+    for v in ${old_versions}; do
+        echo "  Removing existing DKMS registration ${PACKAGE_NAME}/${v}..."
+        dkms remove -m "${PACKAGE_NAME}" -v "${v}" --all || true
+    done
 fi
-rm -rf "${SRC_DIR}"
+# Glob-clean any orphan source trees too, including the about-to-be-recreated
+# one. nullglob makes the array empty (rather than the literal pattern) when
+# nothing matches.
+shopt -s nullglob
+old_src_dirs=(/usr/src/${PACKAGE_NAME}-*)
+shopt -u nullglob
+if [ ${#old_src_dirs[@]} -gt 0 ]; then
+    rm -rf "${old_src_dirs[@]}"
+fi
 mkdir -p "${SRC_DIR}"
 cp -rp "${SCRIPT_DIR}/." "${SRC_DIR}/"
 
