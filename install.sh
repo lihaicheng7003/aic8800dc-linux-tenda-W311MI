@@ -21,16 +21,18 @@ if [ "$(id -u)" -ne 0 ]; then
     exit 1
 fi
 
-# Check dependencies
-for cmd in dkms make depmod; do
+# Check dependencies. `eject` is needed by tools/aic.rules to flip dongles
+# out of USB mass-storage mode on first plug; without it the device stays
+# at VID:PID a69c:5721 and the Wi-Fi PID never appears.
+for cmd in dkms make depmod eject; do
     if ! command -v "$cmd" &>/dev/null; then
         echo "Error: '$cmd' is not installed." >&2
         echo ""
         echo "Install dependencies first:"
-        echo "  Ubuntu/Debian: sudo apt install dkms build-essential linux-headers-\$(uname -r)"
-        echo "  (if not found): sudo apt install dkms build-essential linux-headers-generic"
-        echo "  Arch:          sudo pacman -S dkms linux-headers base-devel"
-        echo "  Fedora:        sudo dnf install dkms kernel-devel kernel-headers"
+        echo "  Ubuntu/Debian: sudo apt install dkms build-essential linux-headers-\$(uname -r) eject"
+        echo "  (if not found): sudo apt install dkms build-essential linux-headers-generic eject"
+        echo "  Arch:          sudo pacman -S dkms linux-headers base-devel eject"
+        echo "  Fedora:        sudo dnf install dkms kernel-devel kernel-headers eject"
         exit 1
     fi
 done

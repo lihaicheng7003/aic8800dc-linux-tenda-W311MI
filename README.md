@@ -1,111 +1,86 @@
 # AIC8800DC Linux Driver (Patched)
 
-Patched out-of-tree Linux kernel driver for the AIC8800DC USB Wi-Fi chipset.
-Based on upstream version 6.4.3.0 with compatibility fixes.
+Out-of-tree Linux driver for the AIC8800DC USB Wi-Fi chipset, based on
+upstream 6.4.3.0 with compatibility fixes. DKMS-aware: rebuilds itself
+on every kernel update.
 
-DKMS is supported. The driver rebuilds automatically after every kernel update.
-
----
-
-## Installation
-
-### 1. Install dependencies
-
-**Ubuntu / Debian:**
+## Install
 
 ```bash
-sudo apt install dkms build-essential linux-headers-$(uname -r) linux-headers-generic
+# Debian / Ubuntu
+sudo apt install dkms build-essential linux-headers-$(uname -r) eject
+
+# Arch
+sudo pacman -S dkms linux-headers base-devel eject
+
+# Fedora
+sudo dnf install dkms kernel-devel kernel-headers eject
 ```
 
-**Arch Linux:**
-
-```bash
-sudo pacman -S dkms linux-headers base-devel
-```
-
-**Fedora:**
-
-```bash
-sudo dnf install dkms kernel-devel kernel-headers
-```
-
-### 2. Clone and install
+Then:
 
 ```bash
 git clone https://github.com/Kiborgik/aic8800dc-linux-patched.git
 cd aic8800dc-linux-patched
-
-sudo chmod +x install.sh
 sudo ./install.sh
+sudo ./test.sh   # optional sanity check
 ```
 
-### 3. Verify
+## Update
+
+`git pull` + reinstall in one step (run as your normal user, not sudo):
 
 ```bash
-sudo chmod +x test.sh
-sudo ./test.sh
+./update.sh
 ```
-
----
 
 ## Uninstall
 
 ```bash
-sudo chmod +x uninstall.sh
 sudo ./uninstall.sh
 ```
 
----
+## Troubleshooting
 
-## Testing
-
-`test.sh` checks everything without requiring a reboot:
-
-```bash
-sudo ./test.sh
-```
-
-It verifies:
-
-- DKMS registration status
-- `.ko` files installed for the running kernel
-- Module metadata via `modinfo`
-- Whether modules are currently loaded
-- Firmware files in `/lib/firmware/aic8800DC/`
-- udev rule and boot auto-load config
-- DKMS AUTOINSTALL hook presence
-
-**Simulate a kernel upgrade rebuild** (no reboot needed):
+**Driver loads but no `wlan0` appears.** The dongle is probably stuck in
+USB mass-storage mode (VID:PID `a69c:5721`). The udev rule in
+`tools/aic.rules` runs `eject` to flip it into Wi-Fi mode; if `eject`
+isn't installed or the dongle enumerates as a CD-ROM (`sr0` instead of
+`sd*`), nothing happens. Manual fix:
 
 ```bash
-# Install headers for another kernel version using your distro's package manager,
-# then build for that kernel:
-sudo dkms build -m aic8800dc -v 6.4.3.0-patched.1 -k <other-version>
-
-# Confirm both kernels show as installed
-dkms status
+sudo apt install usb-modeswitch
+sudo usb_modeswitch -v a69c -p 5721 -KQ
+# wait a few seconds, then:
+ip link show
+dmesg | tail -30
 ```
 
----
+**Secure Boot.** The .ko must be signed for Secure Boot to load it. See
+your distro's MOK (Machine Owner Key) docs.
 
-## Manual build (cross-compile / embedded targets)
+**Kernel hang or no boot after install.** This driver is tested on
+x86_64 and arm64. Untested platforms (ARMv7 32-bit, single-core, exotic
+embedded boards) may hang during firmware download or USB enumeration.
+Capture logs over a serial console or `journalctl -k -b -1` and open an
+issue.
 
-For Rockchip, Allwinner, Amlogic, or other non-Ubuntu targets, set the platform
-variables in `drivers/aic8800/Makefile` and build directly:
+## Manual / cross-compile build
 
 ```bash
 cd drivers/aic8800
 make
 sudo make install
 sudo depmod -a
-sudo modprobe aic_load_fw
-sudo modprobe aic8800_fdrv
+sudo modprobe aic_load_fw aic8800_fdrv
 ```
 
----
+For Rockchip / Allwinner / Amlogic, set the platform variables in
+`drivers/aic8800/Makefile` before building.
 
-## Notes
+## Build for another kernel without rebooting
 
-- After a kernel update, DKMS rebuilds the driver automatically. No manual action needed.
-- If the build fails on a new kernel, the driver may need patching for API changes introduced in that kernel. This is a limitation of all out-of-tree drivers.
-- **Secure Boot users:** the kernel module must be signed to load under Secure Boot. See your distro's MOK (Machine Owner Key) documentation for signing instructions.
+```bash
+sudo dkms build -m aic8800dc -v 6.4.3.0-patched.2 -k <other-version>
+dkms status
+```

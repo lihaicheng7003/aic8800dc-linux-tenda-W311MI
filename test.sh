@@ -37,7 +37,11 @@ echo ""
 # --- 2. Module files on disk ---
 echo "-- Installed .ko files --"
 for mod in aic_load_fw aic8800_fdrv; do
-    KO_PATH="$(find /lib/modules/${KVER} -name "${mod}.ko" -o -name "${mod}.ko.zst" -o -name "${mod}.ko.gz" 2>/dev/null | head -1)"
+    KO_PATH="$(find /lib/modules/${KVER} \
+                -name "${mod}.ko"     -o \
+                -name "${mod}.ko.xz"  -o \
+                -name "${mod}.ko.zst" -o \
+                -name "${mod}.ko.gz"  2>/dev/null | head -1)"
     if [ -n "${KO_PATH}" ]; then
         ok "${KO_PATH}"
     else
