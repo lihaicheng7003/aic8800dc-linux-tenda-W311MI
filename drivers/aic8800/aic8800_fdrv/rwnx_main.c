@@ -3177,7 +3177,19 @@ static int rwnx_cfg80211_del_iface(struct wiphy *wiphy, struct wireless_dev *wde
 	AICWFDBG(LOGINFO, "%s Remove Interface \r\n", dev->name);
     if (dev->reg_state == NETREG_REGISTERED) {
         /* Will call rwnx_close if interface is UP */
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 12, 0)
+        /* On 5.12+ nl80211_del_interface holds wiphy->mtx across this
+         * callback. unregister_netdevice() would trigger the cfg80211
+         * netdev notifier (NETDEV_UNREGISTER), which re-acquires
+         * wiphy->mtx and deadlocks the calling thread. iwd hits this on
+         * every wlan0 reset. cfg80211_unregister_wdev() clears
+         * wdev->registered first, so the notifier's
+         * `if (wdev->registered && !wdev->registering)` guard short-
+         * circuits the recursive lock. */
+        cfg80211_unregister_wdev(wdev);
+#else
         unregister_netdevice(dev);
+#endif
     }
 
     spin_lock_bh(&rwnx_hw->cb_lock);
@@ -6529,6 +6541,13 @@ static void rwnx_wdev_unregister(struct rwnx_hw *rwnx_hw)
     struct rwnx_vif *rwnx_vif, *tmp;
 
     rtnl_lock();
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 12, 0)
+    /* cfg80211_unregister_wdev() (now called via rwnx_cfg80211_del_iface)
+     * asserts wiphy->mtx held on 5.12+. The cfg80211 ops path holds it for
+     * us; on this driver-internal teardown path (module unload / USB
+     * disconnect) we must take it ourselves. */
+    wiphy_lock(rwnx_hw->wiphy);
+#endif
     list_for_each_entry_safe(rwnx_vif, tmp, &rwnx_hw->vifs, list) {
     #if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 6, 0)
         rwnx_cfg80211_del_iface(rwnx_hw->wiphy, &rwnx_vif->wdev);
@@ -6536,6 +6555,9 @@ static void rwnx_wdev_unregister(struct rwnx_hw *rwnx_hw)
         rwnx_cfg80211_del_iface(rwnx_hw->wiphy, rwnx_vif->ndev);
     #endif
     }
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 12, 0)
+    wiphy_unlock(rwnx_hw->wiphy);
+#endif
     rtnl_unlock();
 }
 
