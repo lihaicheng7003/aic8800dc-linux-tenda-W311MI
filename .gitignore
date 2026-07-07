@@ -399,3 +399,7 @@ FodyWeavers.xsd
 
 # JetBrains Rider
 *.sln.iml
+
+# Local build harness and its output (machine-specific, not published)
+docker/
+docker-out/
