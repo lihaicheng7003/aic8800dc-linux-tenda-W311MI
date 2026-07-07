@@ -49,6 +49,8 @@ fi
 
 # --- Firmware and udev rules ---
 echo "[1/5] Installing firmware and udev rules..."
+# create if missing (containers/CI) so cp nests aic8800DC/ instead of its files
+mkdir -p /lib/firmware
 cp -rf "${SCRIPT_DIR}/fw/aic8800DC" /lib/firmware/
 cp "${SCRIPT_DIR}/tools/aic.rules" /etc/udev/rules.d/
 # Reload first so the daemon picks up the new aic.rules, then trigger so
