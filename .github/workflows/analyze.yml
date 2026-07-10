@@ -42,4 +42,4 @@ jobs:
             echo "### Static analysis"
             echo "- sparse + W=1 warnings: $(grep -c 'warning:' analyze-build.log || true)"
             echo "- cppcheck findings: $(wc -l < cppcheck.log)"
-          } >> "$GITHUB_STEP_SUMMARY"
+          } | tee -a "$GITHUB_STEP_SUMMARY"
