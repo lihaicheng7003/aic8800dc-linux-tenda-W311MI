@@ -1,0 +1,45 @@
+name: analyze
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# Advisory static analysis. It prints and counts warnings but never fails
+# the run, because W=1 on this vendor code is noisy. Use it to spot new
+# warnings, not as a gate.
+jobs:
+  static-analysis:
+    runs-on: ubuntu-latest
+    name: static analysis
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: install tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential linux-headers-$(uname -r) sparse cppcheck
+
+      - name: sparse + gcc W=1
+        run: |
+          make -C /lib/modules/$(uname -r)/build \
+            M="$GITHUB_WORKSPACE/drivers/aic8800" W=1 C=1 modules \
+            2>&1 | tee analyze-build.log || true
+
+      - name: cppcheck
+        run: |
+          cppcheck --enable=warning,performance,portability \
+            --inline-suppr --quiet --suppress=missingIncludeSystem \
+            drivers/aic8800/aic8800_fdrv drivers/aic8800/aic_load_fw \
+            2> cppcheck.log || true
+          cat cppcheck.log
+
+      - name: summary
+        run: |
+          {
+            echo "### Static analysis"
+            echo "- sparse + W=1 warnings: $(grep -c 'warning:' analyze-build.log || true)"
+            echo "- cppcheck findings: $(wc -l < cppcheck.log)"
+          } | tee -a "$GITHUB_STEP_SUMMARY"
