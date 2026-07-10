@@ -2093,8 +2093,9 @@ int rwnx_txdatacfm(void *pthis, void *host_id)
     }
 #endif /* CONFIG_RWNX_AMSDUS_TX */
 
+    headroom = sw_txhdr->headroom;
     kmem_cache_free(rwnx_hw->sw_txhdr_cache, sw_txhdr);
-    skb_pull(skb, sw_txhdr->headroom);
+    skb_pull(skb, headroom);
     consume_skb(skb);
 
     return 0;

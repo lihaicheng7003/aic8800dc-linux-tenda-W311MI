@@ -317,6 +317,11 @@ static int rwnx_send_msg(struct aic_usb_dev *usbdev, const void *msg_params,
 
     nonblock = 0;
     cmd = kzalloc(sizeof(struct rwnx_cmd), nonblock ? GFP_ATOMIC : GFP_KERNEL);
+    if (!cmd) {
+        rwnx_msg_free(msg, msg_params);
+        printk("%s: cmd alloc failed\n", __func__);
+        return -ENOMEM;
+    }
     cmd->result  = -EINTR;
     cmd->id      = msg->id;
     cmd->reqid   = reqid;

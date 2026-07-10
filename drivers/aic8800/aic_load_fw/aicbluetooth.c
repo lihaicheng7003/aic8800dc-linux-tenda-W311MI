@@ -237,9 +237,13 @@ static int aic_load_firmware(u32 ** fw_buf, const char *name, struct device *dev
 
 
 	buffer = vmalloc(size);
+	if (!buffer) {
+		release_firmware(fw);
+		return -1;
+	}
 	memset(buffer, 0, size);
 	memcpy(buffer, dst, size);
-	
+
 	*fw_buf = buffer;
 
 	MD5Init(&md5);
@@ -314,7 +318,6 @@ static int aic_load_firmware(u32 ** fw_buf, const char *name, struct device *dev
 
     /* start to read from firmware file */
     buffer = vmalloc(size);
-    memset(buffer, 0, size);
     if(!buffer){
             *fw_buf=NULL;
             __putname(path);
@@ -322,6 +325,7 @@ static int aic_load_firmware(u32 ** fw_buf, const char *name, struct device *dev
             fp=NULL;
             return -1;
     }
+    memset(buffer, 0, size);
 
 
     #if LINUX_VERSION_CODE > KERNEL_VERSION(4, 13, 16)
@@ -350,8 +354,6 @@ static int aic_load_firmware(u32 ** fw_buf, const char *name, struct device *dev
     src = (u32*)buffer;
     //printk("malloc dst\n");
     dst = (u32*)vmalloc(size);
-    memset(dst, 0, size);
-
     if(!dst){
             *fw_buf=NULL;
             __putname(path);
@@ -361,6 +363,7 @@ static int aic_load_firmware(u32 ** fw_buf, const char *name, struct device *dev
             buffer=NULL;
             return -1;
     }
+    memset(dst, 0, size);
 
     for(i=0;i<(size/4);i++){
             dst[i] = src[i];
@@ -1051,7 +1054,18 @@ int rwnx_plat_bin_fw_patch_table_upload_android(struct aic_usb_dev *usbdev, char
 
 	while (p - rawdata < size) {
 		//printk("size = %d  p - rawdata = %d \r\n", size, p - rawdata);
+		/* need a full record header: 16 (name) + 4 (type) + 4 (len) */
+		if ((size - (p - rawdata)) < 24) {
+			printk("patch table: truncated record header\n");
+			ret = -1;
+			goto err;
+		}
+
 		new = (struct aicbt_patch_table *)vmalloc(sizeof(struct aicbt_patch_table));
+		if (!new) {
+			ret = -1;
+			goto err;
+		}
 		memset(new, 0, sizeof(struct aicbt_patch_table));
 		if (head == NULL) {
 			head = new;
@@ -1062,6 +1076,10 @@ int rwnx_plat_bin_fw_patch_table_upload_android(struct aic_usb_dev *usbdev, char
 		}
 
 		cur->name = (char *)vmalloc(sizeof(char) * 16);
+		if (!cur->name) {
+			ret = -1;
+			goto err;
+		}
 		memset(cur->name, 0, sizeof(char) * 16);
 		memcpy(cur->name, p, 16);
 		p += 16;
@@ -1075,7 +1093,18 @@ int rwnx_plat_bin_fw_patch_table_upload_android(struct aic_usb_dev *usbdev, char
 		if((cur->type )  >= 1000 ) {//Temp Workaround
 			cur->len = 0;
 		}else{
+			/* len*8 must fit in the remaining bytes (guards u32 overflow
+			   and reading past the firmware buffer) */
+			if ((u64)cur->len * 8 > (u64)(size - (p - rawdata))) {
+				printk("patch table: bad record len %u\n", cur->len);
+				ret = -1;
+				goto err;
+			}
 			cur->data = (uint32_t *)vmalloc(sizeof(uint8_t) * cur->len * 8);
+			if (!cur->data) {
+				ret = -1;
+				goto err;
+			}
 			memset(cur->data, 0, sizeof(uint8_t) * cur->len * 8);
 			memcpy(cur->data, p, cur->len * 8);
 			p += cur->len * 8;
@@ -1088,7 +1117,7 @@ int rwnx_plat_bin_fw_patch_table_upload_android(struct aic_usb_dev *usbdev, char
 
 	return ret;
 err:
-	//aicbt_patch_table_free(&head);
+	aicbt_patch_table_free(&head);
 
 	if (rawdata){
 		vfree(rawdata);

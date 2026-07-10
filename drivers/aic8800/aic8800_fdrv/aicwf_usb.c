@@ -1259,6 +1259,10 @@ static int aicwf_usb_alloc_tx_urb(struct aic_usb_dev *usb_dev)
         }
         #ifdef CONFIG_USB_TX_AGGR
         usb_buf->skb = dev_alloc_skb(MAX_USB_AGGR_TXPKT_LEN);
+        if (!usb_buf->skb) {
+            usb_err("could not allocate tx aggr skb\n");
+            goto err;
+        }
         #endif
         #if defined CONFIG_USB_NO_TRANS_DMA_MAP
         // alloc dma buf
@@ -2006,9 +2010,9 @@ static int aicwf_usb_probe(struct usb_interface *intf, const struct usb_device_i
 	ret = aicwf_usb_chipmatch(usb_dev, id->idVendor, id->idProduct);
 	
 	if (ret < 0) {
-        AICWFDBG(LOGERROR, "%s pid:0x%04X vid:0x%04X unsupport\n", 
+        AICWFDBG(LOGERROR, "%s pid:0x%04X vid:0x%04X unsupport\n",
 			__func__, id->idVendor, id->idProduct);
-        goto out_free_bus;
+        goto out_free;
     }
 
     ret = aicwf_parse_usb(usb_dev, intf);
