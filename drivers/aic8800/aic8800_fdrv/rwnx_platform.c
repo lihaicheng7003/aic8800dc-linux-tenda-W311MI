@@ -279,6 +279,10 @@ static int rwnx_load_firmware(u32 **fw_buf, const char *name, struct device *dev
 	}
 	
 	buffer = vmalloc(size);
+	if (!buffer) {
+		release_firmware(fw);
+		return -1;
+	}
 	memset(buffer, 0, size);
 	memcpy(buffer, dst, size);
 

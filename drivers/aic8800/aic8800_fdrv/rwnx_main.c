@@ -5277,7 +5277,8 @@ struct ieee80211_channel *rwnx_cfg80211_get_channel(struct wiphy *wiphy)
 
     if(found && rwnx_hw->set_chan.center_freq) {
         chan = kzalloc(sizeof(struct ieee80211_channel), GFP_KERNEL);
-        memcpy((u8 *)chan, (u8 *)&rwnx_hw->set_chan, sizeof(struct ieee80211_channel));
+        if (chan)
+            memcpy((u8 *)chan, (u8 *)&rwnx_hw->set_chan, sizeof(struct ieee80211_channel));
     }
 
     return chan;

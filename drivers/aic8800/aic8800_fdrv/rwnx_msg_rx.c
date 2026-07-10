@@ -691,14 +691,18 @@ static inline int rwnx_rx_scanu_result_ind(struct rwnx_hw *rwnx_hw,
 
 		//print scan result info start
 		ssid_len = ie[1];
+		if (ssid_len > IEEE80211_MAX_SSID_LEN)
+			ssid_len = IEEE80211_MAX_SSID_LEN;
 		ssid = (char *)kmalloc(sizeof(char)* (ssid_len + 1), GFP_ATOMIC);
-		memset(ssid, 0, ssid_len + 1);
-		memcpy(ssid, &ie[2], ssid_len);
-		freq = ind->center_freq;
-		AICWFDBG(LOGDEBUG, "%s %02x:%02x:%02x:%02x:%02x:%02x ssid:%s freq:%d timestamp:%ld, %d\r\n", __func__, 
-			bss->bssid[0],bss->bssid[1],bss->bssid[2],
-			bss->bssid[3],bss->bssid[4],bss->bssid[5],
-			ssid, freq, (long)mgmt->u.probe_resp.timestamp, ind->rssi);
+		if (ssid && bss) {
+			memset(ssid, 0, ssid_len + 1);
+			memcpy(ssid, &ie[2], ssid_len);
+			freq = ind->center_freq;
+			AICWFDBG(LOGDEBUG, "%s %02x:%02x:%02x:%02x:%02x:%02x ssid:%s freq:%d timestamp:%ld, %d\r\n", __func__,
+				bss->bssid[0],bss->bssid[1],bss->bssid[2],
+				bss->bssid[3],bss->bssid[4],bss->bssid[5],
+				ssid, freq, (long)mgmt->u.probe_resp.timestamp, ind->rssi);
+		}
 		kfree(ssid);
 		ssid = NULL;
 		//print scan result info end
@@ -707,8 +711,16 @@ static inline int rwnx_rx_scanu_result_ind(struct rwnx_hw *rwnx_hw,
 		if(rwnx_hw->wext_scan){
 			
 			scan_re_wext = (struct scanu_result_wext *)vmalloc(sizeof(struct scanu_result_wext));
+			if (!scan_re_wext)
+				return 0;
 			scan_re_wext->ind = (struct scanu_result_ind *)vmalloc(sizeof(struct scanu_result_ind));
 			scan_re_wext->payload = (u32_l *)vmalloc(sizeof(u32_l) * ind->length);
+			if (!scan_re_wext->ind || !scan_re_wext->payload) {
+				vfree(scan_re_wext->ind);
+				vfree(scan_re_wext->payload);
+				vfree(scan_re_wext);
+				return 0;
+			}
 
 			memset(scan_re_wext->ind, 0, sizeof(struct scanu_result_ind));
 			memset(scan_re_wext->payload, 0, ind->length);

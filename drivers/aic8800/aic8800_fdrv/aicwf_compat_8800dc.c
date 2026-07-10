@@ -1965,7 +1965,8 @@ int aicwf_plat_patch_load_8800dc(struct rwnx_hw *rwnx_hw){
     int ret = 0;
 
 #ifndef ANDROID_PLATFORM
-        strcat(aic_fw_path, "/aic8800DC");
+        if (strlen(aic_fw_path) + sizeof("/aic8800DC") <= sizeof(aic_fw_path))
+            strcat(aic_fw_path, "/aic8800DC");
 #endif
     if (testmode == 0) {
 #if !defined(CONFIG_FPGA_VERIFICATION)

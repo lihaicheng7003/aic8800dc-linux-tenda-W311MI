@@ -1450,13 +1450,15 @@ static int aicwf_usb_probe(struct usb_interface *intf, const struct usb_device_i
 		rwnx_plat_bin_fw_upload_android(usb_dev, RAM_FW_BLE_SCAN_WAKEUP_ADDR, FW_BLE_SCAN_WAKEUP_NAME);
 		rwnx_send_dbg_mem_write_req(usb_dev, 0x15FF00, 0x53454C42);//magic_num
 		rwnx_send_dbg_mem_write_req(usb_dev, 0x15FF04, ble_scan_wakeup_reboot_time);//reboot time
-		paring_id_num = get_paring_ids(paringid, paring_ids);
-		for(i = 0; i < paring_id_num; i++){
-			printk("paring_ids[%d]:0x%X \r\n", i, paring_ids[i]);
-			rwnx_send_dbg_mem_write_req(usb_dev, 0x15FF08 + (4 * i), paring_ids[i]);
+		if (paring_ids) {
+			paring_id_num = get_paring_ids(paringid, paring_ids);
+			for(i = 0; i < paring_id_num; i++){
+				printk("paring_ids[%d]:0x%X \r\n", i, paring_ids[i]);
+				rwnx_send_dbg_mem_write_req(usb_dev, 0x15FF08 + (4 * i), paring_ids[i]);
+			}
+			kfree(paring_ids);
 		}
 		rwnx_send_dbg_start_app_req(usb_dev, RAM_FW_BLE_SCAN_WAKEUP_ADDR, HOST_START_APP_AUTO);
-		kfree(paring_ids);
 #endif
 		goto out_free_bus;
 	}  else {

@@ -1235,7 +1235,7 @@ static ssize_t rwnx_dbgfs_regdbg_write(struct file *file,
 
 	struct rwnx_hw *priv = file->private_data;
 	char buf[32];
-	u32 addr,val, oper;
+	u32 addr = 0, val = 0, oper = 0xFFFFFFFF;
 	size_t len = min_t(size_t, count, sizeof(buf) - 1);
     	struct dbg_mem_read_cfm mem_read_cfm;
     	int ret;

@@ -170,6 +170,7 @@ static inline void limit_chan_bw(u8_l *bw, u16_l primary, u16_l *center1)
 struct rwnx_cmd *rwnx_cmd_malloc(void){
 	struct rwnx_cmd *cmd = NULL;
 	unsigned long flags = 0;
+	bool pending = false;
 
 	spin_lock_irqsave(&cmd_array_lock, flags);
 
@@ -182,16 +183,21 @@ struct rwnx_cmd *rwnx_cmd_malloc(void){
 		}
 	}
 
-	if(cmd_array_index >= RWNX_CMD_HIGH_WATER_SIZE){
-		AICWFDBG(LOGERROR, "%s cmd(%d) was pending...\r\n", __func__, cmd_array_index);
-		mdelay(100);
-	}
+	pending = (cmd_array_index >= RWNX_CMD_HIGH_WATER_SIZE);
 
 	if(!cmd){
 		AICWFDBG(LOGERROR, "%s array is empty...\r\n", __func__);
 	}
 
 	spin_unlock_irqrestore(&cmd_array_lock, flags);
+
+	/* Backpressure when the pool is above high-water. Delay OUTSIDE the lock:
+	   the original mdelay ran under spin_lock_irqsave, stalling every cmd
+	   alloc/free with IRQs disabled for 100ms. */
+	if(pending){
+		AICWFDBG(LOGERROR, "%s cmd pool pending...\r\n", __func__);
+		mdelay(100);
+	}
 
 	return cmd;
 }
@@ -435,6 +441,11 @@ static int rwnx_send_msg(struct rwnx_hw *rwnx_hw, const void *msg_params,
     //nonblock = is_non_blocking_msg(msg->id);
     nonblock = 0;//AIDEN
     cmd = rwnx_cmd_malloc();//kzalloc(sizeof(struct rwnx_cmd), nonblock ? GFP_ATOMIC : GFP_KERNEL);
+    if (!cmd) {
+        AICWFDBG(LOGERROR, "%s: cmd pool exhausted, dropping msg\n", __func__);
+        rwnx_msg_free(rwnx_hw, msg_params);
+        return -ENOMEM;
+    }
     cmd->result  = -EINTR;
     cmd->id      = msg->id;
     cmd->reqid   = reqid;
@@ -512,6 +523,11 @@ static int rwnx_send_msg1(struct rwnx_hw *rwnx_hw, const void *msg_params,
     //nonblock = is_non_blocking_msg(msg->id);
 	nonblock = 0;
     cmd = rwnx_cmd_malloc();//kzalloc(sizeof(struct rwnx_cmd), nonblock ? GFP_ATOMIC : GFP_KERNEL);
+    if (!cmd) {
+        AICWFDBG(LOGERROR, "%s: cmd pool exhausted, dropping msg\n", __func__);
+        rwnx_msg_free(rwnx_hw, msg_params);
+        return -ENOMEM;
+    }
     cmd->result  = -EINTR;
     cmd->id      = msg->id;
     cmd->reqid   = reqid;
