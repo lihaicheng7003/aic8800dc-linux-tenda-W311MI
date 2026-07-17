@@ -95,10 +95,11 @@ static int aicwf_vendor_start_mkeep_alive(struct wiphy *wiphy, struct wireless_d
 	u8 mkeep_alive_id = 0;
 	u8 *ip_pkt = NULL;
 	u16 ip_pkt_len = 0;
-	u8 src_mac[6];
-	u8 dst_mac[6];
+	u8 src_mac[ETH_ALEN];
+	u8 dst_mac[ETH_ALEN];
 	u32 period_msec = 0;
 	const struct nlattr *iter;
+	const struct nlattr *attrs[MKEEP_ALIVE_ATTRIBUTE_MAX + 1] = {};
 	struct rwnx_hw *rwnx_hw = wiphy_priv(wiphy);
 	struct rwnx_vif *rwnx_vif = container_of(wdev, struct rwnx_vif, wdev);
 	gfp_t kflags = in_atomic() ? GFP_ATOMIC : GFP_KERNEL;
@@ -106,52 +107,46 @@ static int aicwf_vendor_start_mkeep_alive(struct wiphy *wiphy, struct wireless_d
 
 	nla_for_each_attr(iter, data, len, rem) {
 		type = nla_type(iter);
-		switch (type) {
-		case MKEEP_ALIVE_ATTRIBUTE_ID:
-			mkeep_alive_id = nla_get_u8(iter);
-			break;
-		case MKEEP_ALIVE_ATTRIBUTE_IP_PKT_LEN:
-			ip_pkt_len = nla_get_u16(iter);
-			if (ip_pkt_len > MKEEP_ALIVE_IP_PKT_MAX) {
-				ret = -EINVAL;
-				goto exit;
-			}
-			break;
-		case MKEEP_ALIVE_ATTRIBUTE_IP_PKT:
-			if (!ip_pkt_len) {
-				ret = -EINVAL;
-				printk("ip packet length is 0\n");
-				goto exit;
-			}
-			ip_pkt = (u8 *)kzalloc(ip_pkt_len, kflags);
-			if (ip_pkt == NULL) {
-				ret = -ENOMEM;
-				printk("Failed to allocate mem for ip packet\n");
-				goto exit;
-			}
-			memcpy(ip_pkt, (u8 *)nla_data(iter), ip_pkt_len);
-			break;
-		case MKEEP_ALIVE_ATTRIBUTE_SRC_MAC_ADDR:
-			memcpy(src_mac, nla_data(iter), 6);
-			break;
-		case MKEEP_ALIVE_ATTRIBUTE_DST_MAC_ADDR:
-			memcpy(dst_mac, nla_data(iter), 6);
-			break;
-		case MKEEP_ALIVE_ATTRIBUTE_PERIOD_MSEC:
-			period_msec = nla_get_u32(iter);
-			break;
-		default:
+		if (!type || type > MKEEP_ALIVE_ATTRIBUTE_MAX || attrs[type]) {
 			pr_err("%s(%d), Unknown type: %d\n", __func__, __LINE__, type);
 			ret = -EINVAL;
 			goto exit;
 		}
+		attrs[type] = iter;
 	}
 
-	if (ip_pkt == NULL) {
+	if (!attrs[MKEEP_ALIVE_ATTRIBUTE_ID] ||
+	    nla_len(attrs[MKEEP_ALIVE_ATTRIBUTE_ID]) != sizeof(mkeep_alive_id) ||
+	    !attrs[MKEEP_ALIVE_ATTRIBUTE_IP_PKT_LEN] ||
+	    nla_len(attrs[MKEEP_ALIVE_ATTRIBUTE_IP_PKT_LEN]) != sizeof(ip_pkt_len) ||
+	    !attrs[MKEEP_ALIVE_ATTRIBUTE_IP_PKT] ||
+	    !attrs[MKEEP_ALIVE_ATTRIBUTE_SRC_MAC_ADDR] ||
+	    nla_len(attrs[MKEEP_ALIVE_ATTRIBUTE_SRC_MAC_ADDR]) != ETH_ALEN ||
+	    !attrs[MKEEP_ALIVE_ATTRIBUTE_DST_MAC_ADDR] ||
+	    nla_len(attrs[MKEEP_ALIVE_ATTRIBUTE_DST_MAC_ADDR]) != ETH_ALEN ||
+	    !attrs[MKEEP_ALIVE_ATTRIBUTE_PERIOD_MSEC] ||
+	    nla_len(attrs[MKEEP_ALIVE_ATTRIBUTE_PERIOD_MSEC]) != sizeof(period_msec)) {
 		ret = -EINVAL;
-		printk("ip packet is NULL\n");
 		goto exit;
 	}
+
+	mkeep_alive_id = nla_get_u8(attrs[MKEEP_ALIVE_ATTRIBUTE_ID]);
+	ip_pkt_len = nla_get_u16(attrs[MKEEP_ALIVE_ATTRIBUTE_IP_PKT_LEN]);
+	if (!ip_pkt_len || ip_pkt_len > MKEEP_ALIVE_IP_PKT_MAX ||
+	    nla_len(attrs[MKEEP_ALIVE_ATTRIBUTE_IP_PKT]) != ip_pkt_len) {
+		ret = -EINVAL;
+		goto exit;
+	}
+
+	ip_pkt = kmemdup(nla_data(attrs[MKEEP_ALIVE_ATTRIBUTE_IP_PKT]),
+			   ip_pkt_len, kflags);
+	if (!ip_pkt) {
+		ret = -ENOMEM;
+		goto exit;
+	}
+	memcpy(src_mac, nla_data(attrs[MKEEP_ALIVE_ATTRIBUTE_SRC_MAC_ADDR]), ETH_ALEN);
+	memcpy(dst_mac, nla_data(attrs[MKEEP_ALIVE_ATTRIBUTE_DST_MAC_ADDR]), ETH_ALEN);
+	period_msec = nla_get_u32(attrs[MKEEP_ALIVE_ATTRIBUTE_PERIOD_MSEC]);
 
 	ret = aic_dev_start_mkeep_alive(rwnx_hw, rwnx_vif, mkeep_alive_id, ip_pkt, ip_pkt_len, src_mac,
 		dst_mac, period_msec);
@@ -740,11 +735,11 @@ static const struct nla_policy
 aicwf_cfg80211_mkeep_alive_policy[MKEEP_ALIVE_ATTRIBUTE_MAX+1] = {
 	[0] = {.type = NLA_UNSPEC },
 	[MKEEP_ALIVE_ATTRIBUTE_ID]		= { .type = NLA_U8 },
-	[MKEEP_ALIVE_ATTRIBUTE_IP_PKT]		= { .type = NLA_MSECS },
+	[MKEEP_ALIVE_ATTRIBUTE_IP_PKT]		= { .type = NLA_BINARY, .len = 256 },
 	[MKEEP_ALIVE_ATTRIBUTE_IP_PKT_LEN]	= { .type = NLA_U16 },
-	[MKEEP_ALIVE_ATTRIBUTE_SRC_MAC_ADDR]	= { .type = NLA_MSECS,
+	[MKEEP_ALIVE_ATTRIBUTE_SRC_MAC_ADDR]	= { .type = NLA_BINARY,
 							.len  = ETH_ALEN },
-	[MKEEP_ALIVE_ATTRIBUTE_DST_MAC_ADDR]	= { .type = NLA_MSECS,
+	[MKEEP_ALIVE_ATTRIBUTE_DST_MAC_ADDR]	= { .type = NLA_BINARY,
 							.len  = ETH_ALEN },
 	[MKEEP_ALIVE_ATTRIBUTE_PERIOD_MSEC]	= { .type = NLA_U32 },
 };
