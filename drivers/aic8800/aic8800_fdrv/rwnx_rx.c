@@ -2208,6 +2208,10 @@ void defrag_timeout_cb(struct timer_list *t)
 
 	printk("%s:%p\r\n", __func__, defrag_ctrl);
 	spin_lock_bh(&defrag_ctrl->rwnx_hw->defrag_lock);
+	if (defrag_ctrl->teardown) {
+		spin_unlock_bh(&defrag_ctrl->rwnx_hw->defrag_lock);
+		return;
+	}
 	list_del_init(&defrag_ctrl->list);
 	dev_kfree_skb(defrag_ctrl->skb);
 	kfree(defrag_ctrl);
@@ -2821,4 +2825,3 @@ end:
     REG_SW_CLEAR_PROFILING(rwnx_hw, SW_PROF_RWNXDATAIND);
     return 0;
 }
-

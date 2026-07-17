@@ -715,6 +715,7 @@ struct defrag_ctrl_info {
     struct sk_buff *skb;
     struct timer_list defrag_timer;
     struct rwnx_hw *rwnx_hw;
+    bool teardown;
 };
 
 struct amsdu_subframe_hdr {
