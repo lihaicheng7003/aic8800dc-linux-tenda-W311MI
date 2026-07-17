@@ -66,3 +66,27 @@ jobs:
             dkms add   -m "$PACKAGE_NAME" -v "$PACKAGE_VERSION"
             dkms build -m "$PACKAGE_NAME" -v "$PACKAGE_VERSION" -k "$kver"
           '
+
+  ubuntu-20-04-kernel-5-15:
+    runs-on: ubuntu-latest
+    name: Ubuntu 20.04 / 5.15 HWE
+    steps:
+      - uses: actions/checkout@v7
+      - name: dkms build
+        run: |
+          docker run --rm -v "$PWD:/src:ro" ubuntu:20.04 bash -c '
+            set -e
+            export DEBIAN_FRONTEND=noninteractive
+            apt-get update
+            apt-get install -y --no-install-recommends \
+              build-essential dkms linux-headers-generic-hwe-20.04
+            kver=$(find /lib/modules -mindepth 1 -maxdepth 1 -type d \
+              -name "5.15.0-*-generic" -printf "%f\n" | sort -V | tail -1)
+            test -n "$kver"
+            test -e "/lib/modules/$kver/build/Makefile"
+            . /src/dkms.conf
+            mkdir -p "/usr/src/$PACKAGE_NAME-$PACKAGE_VERSION"
+            cp -a /src/. "/usr/src/$PACKAGE_NAME-$PACKAGE_VERSION/"
+            dkms add   -m "$PACKAGE_NAME" -v "$PACKAGE_VERSION"
+            dkms build -m "$PACKAGE_NAME" -v "$PACKAGE_VERSION" -k "$kver"
+          '
