@@ -57,9 +57,7 @@ passed IPv4, IPv6, DNS, and HTTPS connectivity tests.
 The merged Tenda 1.0.13 driver was subsequently tested on the same machine
 and adapter. It bound to `2604:0013`, selected the W311 configuration,
 connected through NetworkManager, obtained IPv4 and IPv6 addresses, and
-passed interface-bound IPv4 ping plus IPv4/IPv6 HTTPS tests. The adapter had
-to be connected directly to a host USB port; the intervening KVM/USB hub
-repeatedly failed enumeration with xHCI error `-71` before driver probe.
+passed interface-bound IPv4 ping plus IPv4/IPv6 HTTPS tests.
 
 > This is a community driver, not an official Ubuntu, Tenda, AIC, or
 > mainline Linux kernel driver. Test each kernel and adapter revision
@@ -231,20 +229,6 @@ modinfo aic8800_fdrv | grep -Ei '2604.*0013|2604.*0014'
 
 If no alias is printed, rebuild and reinstall the DKMS module from this
 fork rather than an unmodified upstream source tree.
-
-### USB error -71 or `Cannot enable`
-
-These messages occur during USB enumeration, before the Wi-Fi driver probe:
-
-```text
-Cannot enable. Maybe the USB cable is bad?
-device not accepting address, error -71
-unable to enumerate USB device
-```
-
-Disconnect the adapter completely for 30 seconds, then connect it directly to
-a host USB 2.0 port. Avoid an unpowered hub, KVM, or poor-quality extension
-cable. Test the adapter on another machine if direct connection still fails.
 
 ### Network commands block while removing the driver
 
