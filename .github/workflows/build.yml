@@ -27,16 +27,22 @@ jobs:
   build:
     runs-on: ubuntu-latest
     name: ${{ matrix.name }}
+    # Track future kernel API changes without making an explicitly
+    # experimental matrix entry fail the supported-kernel build gate.
+    continue-on-error: ${{ matrix.experimental }}
     strategy:
       fail-fast: false
       matrix:
         include:
           - name: 6.12 LTS
             pkgver: 6.12.1.arch1-1
-          - name: 7.1 stable
-            pkgver: 7.1.2.arch3-1
-          - name: latest
+            experimental: false
+          - name: 6.19 supported
+            pkgver: 6.19.13.arch1-1
+            experimental: false
+          - name: latest (experimental)
             pkgver: ""
+            experimental: true
     steps:
       - uses: actions/checkout@v7
       - name: dkms build

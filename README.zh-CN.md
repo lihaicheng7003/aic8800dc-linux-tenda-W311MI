@@ -277,6 +277,10 @@ sudo dkms build -m aic8800dc -v 1.0.13-tenda.2 -k <内核版本>
 dkms status
 ```
 
+CI 使用 Linux 6.12 LTS 和 6.19 作为正式门禁，同时将 Arch 当前最新内核作为
+实验性兼容检查。若最新内核引入尚未适配的 API 变化，任务会报告失败细节，但
+不会导致已支持内核的整体 build workflow 失败。
+
 Ubuntu 20.04、内核 5.15 示例：
 
 ```bash

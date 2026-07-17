@@ -1,7 +1,10 @@
 #!/bin/bash
 
-PACKAGE_NAME="aic8800dc"
-PACKAGE_VERSION="6.4.3.0-patched.5"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# Keep the test version in sync with the package automatically. dkms.conf is
+# valid shell syntax and is the single source of truth used by DKMS itself.
+# shellcheck source=dkms.conf
+. "${SCRIPT_DIR}/dkms.conf"
 KVER="$(uname -r)"
 PASS=0
 FAIL=0

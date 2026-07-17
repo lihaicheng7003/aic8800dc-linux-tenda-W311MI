@@ -271,6 +271,11 @@ sudo dkms build -m aic8800dc -v 1.0.13-tenda.2 -k <other-version>
 dkms status
 ```
 
+CI gates releases on Linux 6.12 LTS and 6.19. The current Arch kernel is also
+built as an experimental compatibility signal; failures caused by unreleased
+or newly changed kernel APIs are reported without failing the supported-kernel
+build gate.
+
 ## Upstream
 
 This repository combines:
