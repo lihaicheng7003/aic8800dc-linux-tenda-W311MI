@@ -50,7 +50,7 @@ static int rwnx_freq_to_idx(struct rwnx_hw *rwnx_hw, int freq)
         }
     }
 
-    BUG_ON(1);
+    return -ENOENT;
 
 exit:
     // Channel has been found, return the index
@@ -324,7 +324,7 @@ static inline int rwnx_rx_channel_survey_ind(struct rwnx_hw *rwnx_hw,
 
     RWNX_DBG(RWNX_FN_ENTRY_STR);
 
-    if (idx >  ARRAY_SIZE(rwnx_hw->survey))
+    if (idx < 0 || idx >= ARRAY_SIZE(rwnx_hw->survey))
         return 0;
 
     rwnx_survey = &rwnx_hw->survey[idx];
@@ -1703,4 +1703,3 @@ void rwnx_rx_handle_print(struct rwnx_hw *rwnx_hw, u8 *msg, u32 len)
     spin_unlock_bh(&rwnx_hw->debugfs.fw_log.lock);
 #endif
 }
-
