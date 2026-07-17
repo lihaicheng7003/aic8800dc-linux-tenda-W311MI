@@ -1,0 +1,31 @@
+#!/bin/sh
+set -e
+
+MODULE=aic8800dc
+VERSION=6.4.3.0-patched.5
+
+if [ "$1" = configure ]; then
+    if dkms status -m "$MODULE" -v "$VERSION" 2>/dev/null | grep -q .; then
+        dkms remove -m "$MODULE" -v "$VERSION" --all || true
+    fi
+
+    dkms add -m "$MODULE" -v "$VERSION"
+    dkms autoinstall -m "$MODULE" -v "$VERSION"
+    depmod -a
+
+    if command -v udevadm >/dev/null 2>&1; then
+        udevadm control --reload || true
+        udevadm trigger || true
+    fi
+
+    if [ -L /dev/aicudisk ]; then
+        eject /dev/aicudisk || true
+    fi
+
+    modprobe aic_load_fw 2>/dev/null || true
+    modprobe aic8800_fdrv 2>/dev/null || true
+fi
+
+#DEBHELPER#
+
+exit 0

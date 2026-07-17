@@ -1,0 +1,7 @@
+aic8800dc-tenda-dkms (6.4.3.0+patched5+tenda1) unstable; urgency=medium
+
+  * Initial Debian package for Tenda AX300 W311MI adapters.
+  * Add DKMS support for Tenda USB IDs 2604:0013 and 2604:0014.
+  * Install AIC8800DC firmware and automatic USB mode-switch rule.
+
+ -- Li Haicheng <lihaicheng7003@users.noreply.github.com>  Sat, 18 Jul 2026 00:00:00 +0800

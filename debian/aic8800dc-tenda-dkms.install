@@ -1,0 +1,5 @@
+drivers usr/src/aic8800dc-6.4.3.0-patched.5
+dkms.conf usr/src/aic8800dc-6.4.3.0-patched.5
+fw/aic8800DC lib/firmware
+tools/aic.rules etc/udev/rules.d
+debian/aic8800.conf etc/modules-load.d

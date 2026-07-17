@@ -63,6 +63,35 @@ If SSH access to GitHub is not configured, clone over HTTPS instead:
 git clone https://github.com/lihaicheng7003/aic8800dc-linux-tenda-W311MI.git
 ```
 
+### Install the Debian package
+
+GitHub Releases provide an `all` architecture DKMS package for Debian
+and Ubuntu. Download the package for the release and install it with:
+
+```bash
+sudo apt install ./aic8800dc-tenda-dkms_6.4.3.0+patched5+tenda1_all.deb
+```
+
+The package installs the driver source, firmware, udev rule, and module
+auto-load configuration. Its `postinst` registers the source with DKMS
+and builds the modules for the installed kernel.
+
+Build the package locally with:
+
+```bash
+sudo apt install build-essential debhelper devscripts dkms
+dpkg-buildpackage --no-sign -b
+```
+
+The `.deb` is written to the parent directory. To create a GitHub
+Release, push a version tag; the release workflow builds the package,
+generates `SHA256SUMS`, and attaches both files to the release:
+
+```bash
+git tag -a v6.4.3.0-tenda1 -m 'Release v6.4.3.0-tenda1'
+git push origin v6.4.3.0-tenda1
+```
+
 ## USB mode switching
 
 The installer adds a udev rule that ejects the adapter's virtual disk.

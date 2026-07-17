@@ -403,3 +403,10 @@ FodyWeavers.xsd
 # Local build harness and its output (machine-specific, not published)
 docker/
 docker-out/
+
+# Debian package build output
+debian/.debhelper/
+debian/aic8800dc-tenda-dkms/
+debian/aic8800dc-tenda-dkms.substvars
+debian/debhelper-build-stamp
+debian/files

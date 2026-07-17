@@ -1,0 +1,18 @@
+Source: aic8800dc-tenda-dkms
+Section: kernel
+Priority: optional
+Maintainer: Li Haicheng <lihaicheng7003@users.noreply.github.com>
+Build-Depends: debhelper-compat (= 13)
+Standards-Version: 4.6.2
+Rules-Requires-Root: no
+Homepage: https://github.com/lihaicheng7003/aic8800dc-linux-tenda-W311MI
+
+Package: aic8800dc-tenda-dkms
+Architecture: all
+Depends: ${misc:Depends}, dkms, build-essential, kmod, eject, usb-modeswitch
+Recommends: linux-headers-generic | linux-headers-amd64 | linux-headers
+Description: DKMS driver for Tenda AX300 W311MI AIC8800DC adapters
+ Out-of-tree AIC8800DC Wi-Fi driver with Tenda USB IDs 2604:0013 and
+ 2604:0014 enabled. The package includes firmware, a USB mass-storage
+ mode-switch rule, module auto-loading, and DKMS integration for kernel
+ upgrades.

@@ -1,0 +1,13 @@
+#!/usr/bin/make -f
+
+%:
+	dh $@
+
+override_dh_auto_build:
+	# DKMS compiles the modules for the target kernel during package install.
+
+override_dh_auto_test:
+	# Hardware-dependent tests are run after installation.
+
+override_dh_auto_clean:
+	$(MAKE) -C drivers/aic8800 clean || true
