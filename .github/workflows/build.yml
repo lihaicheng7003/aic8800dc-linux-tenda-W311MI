@@ -78,6 +78,10 @@ jobs:
             image: ubuntu:20.04
             headers: linux-headers-generic
             pattern: 5.4.0-*-generic
+          - name: Ubuntu 20.04 / 5.15 HWE
+            image: ubuntu:20.04
+            headers: linux-headers-generic-hwe-20.04
+            pattern: 5.15.0-*-generic
           - name: Ubuntu 22.04 / 5.15 GA
             image: ubuntu:22.04
             headers: linux-headers-generic
