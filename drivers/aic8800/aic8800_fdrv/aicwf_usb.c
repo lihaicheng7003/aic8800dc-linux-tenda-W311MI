@@ -2549,16 +2549,21 @@ static void aicwf_usb_disconnect(struct usb_interface *intf)
 {
     struct aic_usb_dev *usb_dev =
             (struct aic_usb_dev *) usb_get_intfdata(intf);
+    bool deinit_sem_held = false;
+
     AICWFDBG(LOGINFO, "%s Enter\r\n", __func__);
 
-	if(g_rwnx_plat->wait_disconnect_cb == false){
-		atomic_set(&aicwf_deinit_atomic, 0);
-		down(&aicwf_deinit_sem);
-	}
-
-    if (!usb_dev){
-		AICWFDBG(LOGERROR, "%s usb_dev is null \r\n", __func__);
+    if (!usb_dev) {
+        AICWFDBG(LOGERROR, "%s usb_dev is null \r\n", __func__);
         return;
+    }
+
+    usb_set_intfdata(intf, NULL);
+
+    if (g_rwnx_plat && !g_rwnx_plat->wait_disconnect_cb) {
+        atomic_set(&aicwf_deinit_atomic, 0);
+        down(&aicwf_deinit_sem);
+        deinit_sem_held = true;
     }
 
 #if 0
@@ -2579,7 +2584,8 @@ static void aicwf_usb_disconnect(struct usb_interface *intf)
     vfree(usb_dev->usb_rx_buf);
     kfree(usb_dev);
 	AICWFDBG(LOGINFO, "%s exit\r\n", __func__);
-	up(&aicwf_deinit_sem);
+	if (deinit_sem_held)
+		up(&aicwf_deinit_sem);
 	atomic_set(&aicwf_deinit_atomic, 1);
 }
 
