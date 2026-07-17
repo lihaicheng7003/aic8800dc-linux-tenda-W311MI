@@ -1,5 +1,7 @@
 # Tenda AX300 W311MI AIC8800DC Linux Driver
 
+[English](README.md) | [简体中文](README.zh-CN.md)
+
 [![build](https://github.com/lihaicheng7003/aic8800dc-linux-tenda-W311MI/actions/workflows/build.yml/badge.svg)](https://github.com/lihaicheng7003/aic8800dc-linux-tenda-W311MI/actions/workflows/build.yml)
 
 Out-of-tree Linux driver for Tenda USB Wi-Fi adapters using AIC8800DC and
@@ -160,6 +162,23 @@ A working installation should show both `aic_load_fw` and
 `aic8800_fdrv`, `Driver=aic8800_fdrv` in the USB tree, and a `wlan0` or
 `wlx...` network interface.
 
+Connect with NetworkManager and inspect routing:
+
+```bash
+nmcli device wifi list
+sudo nmcli device wifi connect 'your-ssid' password 'your-password'
+ip -brief address
+ip route show default
+ip -6 route show default
+```
+
+To keep Ethernet as the IPv4 default path:
+
+```bash
+sudo nmcli connection modify 'your-ssid' ipv4.never-default yes
+sudo nmcli connection up 'your-ssid'
+```
+
 ## Update
 
 `git pull` and reinstall in one step. Run it as the normal user, not
@@ -212,6 +231,28 @@ modinfo aic8800_fdrv | grep -Ei '2604.*0013|2604.*0014'
 
 If no alias is printed, rebuild and reinstall the DKMS module from this
 fork rather than an unmodified upstream source tree.
+
+### USB error -71 or `Cannot enable`
+
+These messages occur during USB enumeration, before the Wi-Fi driver probe:
+
+```text
+Cannot enable. Maybe the USB cable is bad?
+device not accepting address, error -71
+unable to enumerate USB device
+```
+
+Disconnect the adapter completely for 30 seconds, then connect it directly to
+a host USB 2.0 port. Avoid an unpowered hub, KVM, or poor-quality extension
+cable. Test the adapter on another machine if direct connection still fails.
+
+### Network commands block while removing the driver
+
+Do not run `modprobe -r aic8800_fdrv` while its wireless interface is active.
+Disconnect and physically remove the adapter, confirm the `wlx...` interface
+has disappeared, and only then unload the modules. If cfg80211 teardown is
+already deadlocked, removing the adapter may not release existing
+uninterruptible tasks and a reboot will be required.
 
 ### Secure Boot
 
