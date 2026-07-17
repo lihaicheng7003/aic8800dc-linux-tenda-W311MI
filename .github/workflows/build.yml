@@ -111,3 +111,33 @@ jobs:
             dkms add   -m "$PACKAGE_NAME" -v "$PACKAGE_VERSION"
             dkms build -m "$PACKAGE_NAME" -v "$PACKAGE_VERSION" -k "$kver"
           '
+
+  ubuntu-dkms-kernel-upgrade:
+    runs-on: ubuntu-latest
+    name: Ubuntu 22.04 / DKMS kernel upgrade
+    steps:
+      - uses: actions/checkout@v7
+      - name: build one DKMS registration for GA and HWE kernels
+        run: |
+          docker run --rm -v "$PWD:/src:ro" ubuntu:22.04 bash -c '
+            set -e
+            export DEBIAN_FRONTEND=noninteractive
+            apt-get update
+            apt-get install -y --no-install-recommends \
+              build-essential dkms linux-headers-generic \
+              linux-headers-generic-hwe-22.04
+            . /src/dkms.conf
+            mkdir -p "/usr/src/$PACKAGE_NAME-$PACKAGE_VERSION"
+            cp -a /src/. "/usr/src/$PACKAGE_NAME-$PACKAGE_VERSION/"
+            dkms add -m "$PACKAGE_NAME" -v "$PACKAGE_VERSION"
+
+            kvers=$(find /lib/modules -mindepth 1 -maxdepth 1 -type d \
+              -name "*-generic" -printf "%f\n" | sort -V)
+            test "$(printf "%s\n" "$kvers" | grep -c .)" -ge 2
+            for kver in $kvers; do
+              test -e "/lib/modules/$kver/build/Makefile"
+              dkms build -m "$PACKAGE_NAME" -v "$PACKAGE_VERSION" -k "$kver"
+              dkms status -m "$PACKAGE_NAME" -v "$PACKAGE_VERSION" -k "$kver" \
+                | grep -q "built"
+            done
+          '
