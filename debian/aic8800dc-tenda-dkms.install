@@ -1,5 +1,6 @@
-drivers usr/src/aic8800dc-6.4.3.0-patched.5
-dkms.conf usr/src/aic8800dc-6.4.3.0-patched.5
+drivers usr/src/aic8800dc-1.0.13-tenda.1
+dkms.conf usr/src/aic8800dc-1.0.13-tenda.1
 fw/aic8800DC lib/firmware
+fw/aic8800D80 lib/firmware
 tools/aic.rules etc/udev/rules.d
 debian/aic8800.conf etc/modules-load.d

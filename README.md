@@ -2,10 +2,10 @@
 
 [![build](https://github.com/lihaicheng7003/aic8800dc-linux-tenda-W311MI/actions/workflows/build.yml/badge.svg)](https://github.com/lihaicheng7003/aic8800dc-linux-tenda-W311MI/actions/workflows/build.yml)
 
-Out-of-tree Linux driver for the Tenda AX300 W311MI USB Wi-Fi adapter
-using the AIC8800DC chipset. This fork is based on the AIC8800DC
-6.4.3.0 community driver and adds the Tenda USB IDs and chip mapping
-required for the adapter to bind to `aic8800_fdrv`.
+Out-of-tree Linux driver for Tenda USB Wi-Fi adapters using AIC8800DC and
+AIC8800D80-family chipsets. It combines the Tenda 1.0.13 driver and firmware
+from SherkeyXD with the DKMS, Debian packaging, CI, and release automation
+originally built around the patched AIC8800DC community driver.
 
 DKMS support is included so the modules are rebuilt automatically when
 the Linux kernel is upgraded.
@@ -20,9 +20,32 @@ changes its USB ID after the virtual disk is ejected:
 | Mass-storage mode | `a69c:5721` | `aicsemi Aic MSC` |
 | Wi-Fi mode | `2604:0013` | Tenda AIC8800DC / W311MI |
 | Wi-Fi mode | `2604:0014` | Tenda AIC8800DC variant |
+| Wi-Fi mode | `2604:001f` | Tenda U11 / AIC8800D80 |
+| Wi-Fi mode | `2604:0020` | Tenda U11 Pro / AIC8800D80 |
 
 The Tenda IDs are explicitly included in the USB device table and are
 mapped to `PRODUCT_ID_AIC8800DC` during probe.
+
+For `2604:0013`, the driver selects the W311-specific
+`aic_userconfig_8800dw_w311.txt`; `2604:0014` uses the corresponding U2
+configuration. The package also carries the D80 firmware needed by the U11
+variants.
+
+## Combined design
+
+- Tenda 1.0.13 driver core, device tables, firmware, private commands, vendor
+  extensions, TCP ACK optimization, and current-kernel compatibility changes.
+- Dedicated W311MI and U2 radio configuration instead of treating every Tenda
+  PID as a generic AIC8800DC device.
+- DKMS registration so modules are rebuilt when a distribution installs a new
+  kernel.
+- Standard debhelper packaging, reproducible GitHub Actions builds, static
+  analysis, release artifacts, and checksums.
+
+The imported driver is maintained as an upstream Git history named `sherkey`;
+future upstream updates can be reviewed with `git fetch sherkey` before they
+are merged. Firmware binaries are redistributed from the upstream driver and
+cannot be audited like source code.
 
 This fork was installed and tested with `2604:0013` on Ubuntu 24.04,
 x86_64, kernel `6.17.0-35-generic`. It successfully created a wireless
@@ -69,12 +92,16 @@ GitHub Releases provide an `all` architecture DKMS package for Debian
 and Ubuntu. Download the package for the release and install it with:
 
 ```bash
-sudo apt install ./aic8800dc-tenda-dkms_6.4.3.0+patched5+tenda1_all.deb
+sudo apt install ./aic8800dc-tenda-dkms_1.0.13+dkms1_all.deb
 ```
 
 The package installs the driver source, firmware, udev rule, and module
 auto-load configuration. Its `postinst` registers the source with DKMS
 and builds the modules for the installed kernel.
+
+The Debian package uses epoch `1:` internally so upgrades from the older
+`6.4.3.0` package are ordered correctly. Debian omits the epoch from the `.deb`
+filename.
 
 Build the package locally with:
 
@@ -88,8 +115,8 @@ Release, push a version tag; the release workflow builds the package,
 generates `SHA256SUMS`, and attaches both files to the release:
 
 ```bash
-git tag -a v6.4.3.0-tenda1 -m 'Release v6.4.3.0-tenda1'
-git push origin v6.4.3.0-tenda1
+git tag -a v1.0.13-dkms1 -m 'Release v1.0.13-dkms1'
+git push origin v1.0.13-dkms1
 ```
 
 ## USB mode switching
@@ -202,14 +229,15 @@ For Rockchip, Allwinner, or Amlogic, set the platform variables in
 ## Build for another kernel
 
 ```bash
-sudo dkms build -m aic8800dc -v 6.4.3.0-patched.5 -k <other-version>
+sudo dkms build -m aic8800dc -v 1.0.13-tenda.1 -k <other-version>
 dkms status
 ```
 
 ## Upstream
 
-This fork is based on:
+This repository combines:
 
 ```text
 https://github.com/Kiborgik/aic8800dc-linux-patched
+https://github.com/SherkeyXD/Tenda-AIC8800DC-Driver
 ```

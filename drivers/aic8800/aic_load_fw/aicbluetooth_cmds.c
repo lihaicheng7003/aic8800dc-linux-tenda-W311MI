@@ -12,10 +12,7 @@
  */
 
 #include <linux/list.h>
-#include <linux/version.h>
-#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 18, 0)
-#include <stddef.h>
-#endif
+//#include <stddef.h>
 #include "aicbluetooth_cmds.h"
 #include "aic_txrxif.h"
 #include "aicwf_usb.h"
@@ -243,6 +240,7 @@ void aicwf_set_cmd_tx(void *dev, struct lmac_msg *msg, uint len)
     struct aicwf_bus *bus = usbdev->bus_if;
     u8 *buffer = bus->cmd_buf;
     u16 index = 0;
+    int ret = 0;
 
     memset(buffer, 0, CMD_BUF_MAX);
     buffer[0] = (len+4) & 0x00ff;
@@ -264,7 +262,10 @@ void aicwf_set_cmd_tx(void *dev, struct lmac_msg *msg, uint len)
     index += 2;
     memcpy(&buffer[index], (u8 *)msg->param, msg->param_len);
 
-    aicwf_bus_txmsg(bus, buffer, len + 8);
+    ret = aicwf_bus_txmsg(bus, buffer, len + 8);
+    if (ret == -EIO) {
+        ret = aicwf_bus_txmsg(bus, buffer, len + 8);
+    }
 }
 
 static inline void *rwnx_msg_zalloc(lmac_msg_id_t const id,
@@ -317,11 +318,6 @@ static int rwnx_send_msg(struct aic_usb_dev *usbdev, const void *msg_params,
 
     nonblock = 0;
     cmd = kzalloc(sizeof(struct rwnx_cmd), nonblock ? GFP_ATOMIC : GFP_KERNEL);
-    if (!cmd) {
-        rwnx_msg_free(msg, msg_params);
-        printk("%s: cmd alloc failed\n", __func__);
-        return -ENOMEM;
-    }
     cmd->result  = -EINTR;
     cmd->id      = msg->id;
     cmd->reqid   = reqid;

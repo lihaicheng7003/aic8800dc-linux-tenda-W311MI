@@ -2,7 +2,7 @@
 set -e
 
 MODULE=aic8800dc
-VERSION=6.4.3.0-patched.5
+VERSION=1.0.13-tenda.1
 
 if [ "$1" = configure ]; then
     if dkms status -m "$MODULE" -v "$VERSION" 2>/dev/null | grep -q .; then

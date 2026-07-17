@@ -28,6 +28,7 @@
 #ifdef CONFIG_USE_WIRELESS_EXT
 #include "aicwf_wext_linux.h"
 #endif
+void rwnx_cfg80211_unlink_bss(struct rwnx_hw *rwnx_hw, struct rwnx_vif *rwnx_vif);
 
 static int rwnx_freq_to_idx(struct rwnx_hw *rwnx_hw, int freq)
 {
@@ -115,24 +116,27 @@ static inline int rwnx_rx_chan_switch_ind(struct rwnx_hw *rwnx_hw,
     } else {
         /* Retrieve the allocated RoC element */
         struct rwnx_roc_elem *roc_elem = rwnx_hw->roc_elem;
+        if (roc_elem) {
+            /* If mgmt_roc is true, remain on channel has been started by ourself */
+            if (!roc_elem->mgmt_roc) {
+                /* Inform the host that we have switch on the indicated off-channel */
+                #if LINUX_VERSION_CODE < KERNEL_VERSION(3, 6, 0)
+                cfg80211_ready_on_channel(roc_elem->wdev->netdev, (u64)(rwnx_hw->roc_cookie_cnt),
+                                        roc_elem->chan, NL80211_CHAN_HT20, roc_elem->duration, GFP_ATOMIC);
+                #elif LINUX_VERSION_CODE < KERNEL_VERSION(3, 8, 0)
+                cfg80211_ready_on_channel(roc_elem->wdev, (u64)(rwnx_hw->roc_cookie_cnt),
+                                        roc_elem->chan, NL80211_CHAN_HT20, roc_elem->duration, GFP_ATOMIC);
+                #else
+                cfg80211_ready_on_channel(roc_elem->wdev, (u64)(rwnx_hw->roc_cookie_cnt),
+                                        roc_elem->chan, roc_elem->duration, GFP_ATOMIC);
+                #endif
+            }
 
-        /* If mgmt_roc is true, remain on channel has been started by ourself */
-        if (!roc_elem->mgmt_roc) {
-            /* Inform the host that we have switch on the indicated off-channel */
-#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 6, 0)
-	    cfg80211_ready_on_channel(roc_elem->wdev->netdev, (u64)(rwnx_hw->roc_cookie_cnt),
-                                      roc_elem->chan, NL80211_CHAN_HT20, roc_elem->duration, GFP_ATOMIC);
-#elif LINUX_VERSION_CODE < KERNEL_VERSION(3, 8, 0)
-	    cfg80211_ready_on_channel(roc_elem->wdev, (u64)(rwnx_hw->roc_cookie_cnt),
-                                      roc_elem->chan, NL80211_CHAN_HT20, roc_elem->duration, GFP_ATOMIC);
-#else
-            cfg80211_ready_on_channel(roc_elem->wdev, (u64)(rwnx_hw->roc_cookie_cnt),
-                                      roc_elem->chan, roc_elem->duration, GFP_ATOMIC);
-#endif
+            /* Keep in mind that we have switched on the channel */
+            roc_elem->on_chan = true;
+        } else {
+            printk("roc_elem == null\n");
         }
-
-        /* Keep in mind that we have switched on the channel */
-        roc_elem->on_chan = true;
 
         // Enable traffic on OFF channel queue
         rwnx_txq_offchan_start(rwnx_hw);
@@ -295,7 +299,9 @@ found_vif:
     if (ps_state == MM_PS_MODE_OFF) {
         // Start TX queues for provided VIF
         rwnx_txq_vif_start(vif_entry, RWNX_TXQ_STOP_VIF_PS, rwnx_hw);
-    }
+		tasklet_schedule(&rwnx_hw->task);
+	}   
+        
     else {
         // Stop TX queues for provided VIF
         rwnx_txq_vif_stop(vif_entry, RWNX_TXQ_STOP_VIF_PS, rwnx_hw);
@@ -386,6 +392,40 @@ static inline int rwnx_rx_pktloss_notify_ind(struct rwnx_hw *rwnx_hw,
                                     ind->num_packets, GFP_ATOMIC);
     }
 #endif /* CONFIG_RWNX_FULLMAC */
+
+    return 0;
+}
+
+static inline int rwnx_radar_detect_ind(struct rwnx_hw *rwnx_hw,
+                                                struct rwnx_cmd *cmd,
+                                                struct ipc_e2a_msg *msg)
+{
+    struct radar_pulse_array_desc *pulses = (struct radar_pulse_array_desc *)msg->param;
+	int i;
+
+    RWNX_DBG(RWNX_FN_ENTRY_STR);
+    //printk("%s\n", __func__);
+
+    if(pulses->cnt == 0) {
+		printk("cnt error\n");
+		return -1;
+    }
+
+	if(rwnx_radar_detection_is_enable(&rwnx_hw->radar, pulses->idx)) {
+		for(i=0; i<pulses->cnt; i++) {
+			struct rwnx_radar_pulses *p = &rwnx_hw->radar.pulses[pulses->idx];
+
+			p->buffer[p->index] = pulses->pulse[i];
+			p->index = (p->index + 1)%RWNX_RADAR_PULSE_MAX;
+			if(p->count < RWNX_RADAR_PULSE_MAX)
+				p->count++;
+			//printk("pulse=%x\n", pulses->pulse[i]);
+		}
+
+		if(!work_pending(&rwnx_hw->radar.detection_work))
+			schedule_work(&rwnx_hw->radar.detection_work);
+    } else
+		printk("not enable\n");
 
     return 0;
 }
@@ -600,7 +640,6 @@ static inline int rwnx_rx_scan_done_ind(struct rwnx_hw *rwnx_hw,
  * Messages from SCANU task
  **************************************************************************/
 #ifdef CONFIG_RWNX_FULLMAC
-extern uint8_t scanning;
 static inline int rwnx_rx_scanu_start_cfm(struct rwnx_hw *rwnx_hw,
                                           struct rwnx_cmd *cmd,
                                           struct ipc_e2a_msg *msg)
@@ -615,6 +654,9 @@ static inline int rwnx_rx_scanu_start_cfm(struct rwnx_hw *rwnx_hw,
     RWNX_DBG(RWNX_FN_ENTRY_STR);
 
     if (rwnx_hw->scan_request 
+#ifdef CONFIG_SCHED_SCAN
+        && !rwnx_hw->is_sched_scan
+#endif//CONFIG_SCHED_SCAN
 #ifdef CONFIG_USE_WIRELESS_EXT
 		&& !rwnx_hw->wext_scan) {
 #else
@@ -643,9 +685,24 @@ static inline int rwnx_rx_scanu_start_cfm(struct rwnx_hw *rwnx_hw,
 	else {
         AICWFDBG(LOGERROR, "%s rwnx_hw->scan_request is NULL!!\r\n", __func__);
     }
+    
+#ifdef CONFIG_SCHED_SCAN
+        if(rwnx_hw->is_sched_scan){
+    
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 12, 0)
+            AICWFDBG(LOGINFO, "%s cfg80211_sched_scan_results \r\n", __func__);
+            cfg80211_sched_scan_results(rwnx_hw->scan_request->wiphy, 
+                    rwnx_hw->sched_scan_req->reqid);
+#else
+            cfg80211_sched_scan_results(rwnx_hw->sched_scan_req->wiphy);
+#endif  
+            kfree(rwnx_hw->scan_request);
+            rwnx_hw->is_sched_scan = false;
+        }
+#endif//CONFIG_SCHED_SCAN
 
     rwnx_hw->scan_request = NULL;
-    scanning = 0;
+    rwnx_hw->scanning = 0;
 
     return 0;
 }
@@ -658,12 +715,19 @@ static inline int rwnx_rx_scanu_result_ind(struct rwnx_hw *rwnx_hw,
     struct ieee80211_channel *chan;
     struct scanu_result_ind *ind = (struct scanu_result_ind *)msg->param;
     struct ieee80211_mgmt *mgmt = (struct ieee80211_mgmt *)ind->payload;
-	
+	u64 tsf;
+	u8 *ie;
+	size_t ielen;
+	u16 capability, beacon_interval;
+	u16 len = ind->length;
+
+#if 0    
 	const u8 *ie = mgmt->u.beacon.variable;
 	char *ssid = NULL;
 	int ssid_len = 0;
 	int freq = 0;
-	
+#endif
+
 #ifdef CONFIG_USE_WIRELESS_EXT
 	struct scanu_result_wext *scan_re_wext;
 #endif
@@ -674,53 +738,67 @@ static inline int rwnx_rx_scanu_result_ind(struct rwnx_hw *rwnx_hw,
     chan = ieee80211_get_channel(rwnx_hw->wiphy, ind->center_freq);
 
     if (chan != NULL) {
-        #if LINUX_VERSION_CODE < KERNEL_VERSION(3, 17, 0)
-        //ktime_t ts;
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 17, 0)
         struct timespec ts;
-		get_monotonic_boottime(&ts);
-        //ts = ktime_get_real();
+        get_monotonic_boottime(&ts);
+        tsf = (u64)ts.tv_sec * 1000000 + div_u64(ts.tv_nsec, 1000);
         mgmt->u.probe_resp.timestamp = ((u64)ts.tv_sec*1000000) + ts.tv_nsec/1000;
-        #else
+#elif LINUX_VERSION_CODE < KERNEL_VERSION(5, 6, 0)
+        struct timespec ts;
+        ts = ktime_to_timespec(ktime_get_boottime());
+        tsf = (u64)ts.tv_sec * 1000000 + div_u64(ts.tv_nsec, 1000);
+        mgmt->u.probe_resp.timestamp = tsf;
+#else
         struct timespec64 ts;
-        ktime_get_real_ts64(&ts);
-        mgmt->u.probe_resp.timestamp = ((u64)ts.tv_sec*1000000) + ts.tv_nsec/1000;
-        #endif
-        bss = cfg80211_inform_bss_frame(rwnx_hw->wiphy, chan,
-                                        (struct ieee80211_mgmt *)ind->payload,
-                                        ind->length, ind->rssi * 100, GFP_ATOMIC);
+        ts = ktime_to_timespec64(ktime_get_boottime());
+        tsf = (u64)ts.tv_sec * 1000000 + div_u64(ts.tv_nsec, 1000);
+        mgmt->u.probe_resp.timestamp = tsf;
+#endif
+        ie = mgmt->u.probe_resp.variable;
+        ielen = len - offsetof(struct ieee80211_mgmt, u.probe_resp.variable);
+        beacon_interval = le16_to_cpu(mgmt->u.probe_resp.beacon_int);
+        capability = le16_to_cpu(mgmt->u.probe_resp.capab_info);
+        /* framework use system bootup time */
+        bss = cfg80211_inform_bss(rwnx_hw->wiphy, chan,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 18, 0))
+            CFG80211_BSS_FTYPE_UNKNOWN,
+#endif
+            mgmt->bssid, tsf, capability, beacon_interval,
+            ie, ielen, ind->rssi * 100, GFP_ATOMIC);
 
-		//print scan result info start
-		ssid_len = ie[1];
-		if (ssid_len > IEEE80211_MAX_SSID_LEN)
-			ssid_len = IEEE80211_MAX_SSID_LEN;
-		ssid = (char *)kmalloc(sizeof(char)* (ssid_len + 1), GFP_ATOMIC);
-		if (ssid && bss) {
-			memset(ssid, 0, ssid_len + 1);
-			memcpy(ssid, &ie[2], ssid_len);
-			freq = ind->center_freq;
-			AICWFDBG(LOGDEBUG, "%s %02x:%02x:%02x:%02x:%02x:%02x ssid:%s freq:%d timestamp:%ld, %d\r\n", __func__,
-				bss->bssid[0],bss->bssid[1],bss->bssid[2],
-				bss->bssid[3],bss->bssid[4],bss->bssid[5],
-				ssid, freq, (long)mgmt->u.probe_resp.timestamp, ind->rssi);
-		}
-		kfree(ssid);
-		ssid = NULL;
-		//print scan result info end
-		
+#if 0
+        //print scan result info start
+        if(ie != NULL && bss != NULL){
+            ssid_len = ie[1];
+            ssid = (char *)vmalloc(sizeof(char)* (ssid_len + 1));
+            if(ssid != NULL){
+                memset(ssid, 0, ssid_len + 1);
+                memcpy(ssid, &ie[2], ssid_len);
+                freq = ind->center_freq;
+                AICWFDBG(LOGDEBUG, "%s %02x:%02x:%02x:%02x:%02x:%02x ssid:%s freq:%d timestamp:%ld\r\n", __func__, 
+                    bss->bssid[0],bss->bssid[1],bss->bssid[2],
+                    bss->bssid[3],bss->bssid[4],bss->bssid[5],
+                    ssid, freq, (long)mgmt->u.probe_resp.timestamp);
+                vfree(ssid);
+                ssid = NULL;
+            }else{
+                AICWFDBG(LOGERROR, "%s ssid vmalloc fail skip printk ssid info \r\n", __func__);
+            }
+        }
+        //print scan result info end
+#endif
+
 #ifdef CONFIG_USE_WIRELESS_EXT
 		if(rwnx_hw->wext_scan){
-			
+			list_for_each_entry(scan_re_wext, &rwnx_hw->wext_scanre_list, scanu_re_list) {
+				if (!memcmp(scan_re_wext->bss->bssid, bss->bssid, ETH_ALEN)) {
+					AICWFDBG(LOGDEBUG, "%s: BSSID already exists, no need to add again\r\n", __func__);
+					goto putbss;
+				}
+			}
 			scan_re_wext = (struct scanu_result_wext *)vmalloc(sizeof(struct scanu_result_wext));
-			if (!scan_re_wext)
-				return 0;
 			scan_re_wext->ind = (struct scanu_result_ind *)vmalloc(sizeof(struct scanu_result_ind));
 			scan_re_wext->payload = (u32_l *)vmalloc(sizeof(u32_l) * ind->length);
-			if (!scan_re_wext->ind || !scan_re_wext->payload) {
-				vfree(scan_re_wext->ind);
-				vfree(scan_re_wext->payload);
-				vfree(scan_re_wext);
-				return 0;
-			}
 
 			memset(scan_re_wext->ind, 0, sizeof(struct scanu_result_ind));
 			memset(scan_re_wext->payload, 0, ind->length);
@@ -735,8 +813,9 @@ static inline int rwnx_rx_scanu_result_ind(struct rwnx_hw *rwnx_hw,
 			return 0;
 		}
 #endif
-    }
 
+    }
+putbss:
     if (bss != NULL)
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3, 9, 0)
 	cfg80211_put_bss(bss);
@@ -819,6 +898,7 @@ static inline void cfg80211_chandef_create(struct cfg80211_chan_def *chandef,
         }
 }
 #endif
+
 static inline int rwnx_rx_sm_connect_ind(struct rwnx_hw *rwnx_hw,
                                          struct rwnx_cmd *cmd,
                                          struct ipc_e2a_msg *msg)
@@ -830,15 +910,18 @@ static inline int rwnx_rx_sm_connect_ind(struct rwnx_hw *rwnx_hw,
     const u8 *extcap_ie;
     const struct ieee_types_extcap *extcap;
     struct ieee80211_channel *chan;
+	//struct cfg80211_bss *bss = NULL;
+    struct wireless_dev *wdev = NULL;
+    //int retry_counter = 10;
 
     RWNX_DBG(RWNX_FN_ENTRY_STR);
-
+	
 	if(!rwnx_vif){
 		AICWFDBG(LOGERROR, "%s rwnx_vif is null \r\n", __func__);
 		return 0;
 	}
 	dev = rwnx_vif->ndev;
-
+    wdev = dev->ieee80211_ptr;
 
     /* Retrieve IE addresses and lengths */
     req_ie = (const u8 *)ind->assoc_ie_buf;
@@ -907,6 +990,13 @@ static inline int rwnx_rx_sm_connect_ind(struct rwnx_hw *rwnx_hw,
 			AICWFDBG(LOGDEBUG, "sta idx %d fc error %d\n",  sta->sta_idx,  atomic_read(&rwnx_hw->sta_flowctrl[sta->sta_idx].tx_pending_cnt));
 		}
 
+#ifdef CONFIG_RADAR_OR_IR_DETECT
+		if (chan->flags & IEEE80211_CHAN_RADAR)
+			rwnx_radar_detection_enable(&rwnx_hw->radar,
+											RWNX_RADAR_DETECT_REPORT,
+											RWNX_RADAR_RIU);
+#endif
+
         if (rwnx_vif->wep_enabled)
             rwnx_vif->wep_auth_err = false;
 
@@ -946,16 +1036,16 @@ static inline int rwnx_rx_sm_connect_ind(struct rwnx_hw *rwnx_hw,
             rwnx_chanctx_link(rwnx_mon_vif, ind->ch_idx, NULL);
         }
 #endif
-		atomic_set(&rwnx_vif->drv_conn_state, (int)RWNX_DRV_STATUS_CONNECTED);
+		//atomic_set(&rwnx_vif->drv_conn_state, (int)RWNX_DRV_STATUS_CONNECTED);
 
     } else if (ind->status_code == WLAN_STATUS_NOT_SUPPORTED_AUTH_ALG) {
         if (rwnx_vif->wep_enabled) {
             rwnx_vif->wep_auth_err = true;
-            printk("con ind wep_auth_err %d\n", rwnx_vif->wep_auth_err);
+            AICWFDBG(LOGINFO, "con ind wep_auth_err %d\n", rwnx_vif->wep_auth_err);
         }
-		atomic_set(&rwnx_vif->drv_conn_state, (int)RWNX_DRV_STATUS_DISCONNECTED);
+		rwnx_set_conn_state(&rwnx_vif->drv_conn_state, (int)RWNX_DRV_STATUS_DISCONNECTED);
     }else{
-		atomic_set(&rwnx_vif->drv_conn_state, (int)RWNX_DRV_STATUS_DISCONNECTED);
+		rwnx_set_conn_state(&rwnx_vif->drv_conn_state, (int)RWNX_DRV_STATUS_DISCONNECTED);
 	}
 
 
@@ -965,62 +1055,86 @@ static inline int rwnx_rx_sm_connect_ind(struct rwnx_hw *rwnx_hw,
         ind->status_code,
         (int)atomic_read(&rwnx_vif->drv_conn_state));
 
+    if(ind->status_code == 0 && (int)atomic_read(&rwnx_vif->drv_conn_state) == RWNX_DRV_STATUS_DISCONNECTING){
+        AICWFDBG(LOGINFO, "%s the disconnection has been requested, return it\r\n", __func__);
+        goto exit;
+    }
+
 
     if (!ind->roamed) {//not roaming
         cfg80211_connect_result(dev, (const u8 *)ind->bssid.array, req_ie,
                                 ind->assoc_req_ie_len, rsp_ie,
                                 ind->assoc_rsp_ie_len, ind->status_code,
                                 GFP_ATOMIC);
+		if (ind->status_code == 0) {
+			rwnx_set_conn_state(&rwnx_vif->drv_conn_state, (int)RWNX_DRV_STATUS_CONNECTED);
+		} else {
+			rwnx_set_conn_state(&rwnx_vif->drv_conn_state, (int)RWNX_DRV_STATUS_DISCONNECTED);
+			rwnx_external_auth_disable(rwnx_vif);
+		}
+		AICWFDBG(LOGINFO, "%s cfg80211_connect_result pass, rwnx_vif->drv_conn_state:%d\r\n", __func__, (int)atomic_read(&rwnx_vif->drv_conn_state));
     }
     else {//roaming
         if(ind->status_code != 0){
             AICWFDBG(LOGINFO, "%s roaming fail to notify disconnect \r\n", __func__);
 			cfg80211_disconnected(dev, 0, NULL, 0,1, GFP_ATOMIC);
+			rwnx_set_conn_state(&rwnx_vif->drv_conn_state, (int)RWNX_DRV_STATUS_DISCONNECTED);
+			rwnx_external_auth_disable(rwnx_vif);
         }else{
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 12, 0)
-        struct cfg80211_roam_info info;
-        memset(&info, 0, sizeof(info));
-        if (rwnx_vif->ch_index < NX_CHAN_CTXT_CNT)
-#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 0, 0)
-			info.channel = rwnx_hw->chanctx_table[rwnx_vif->ch_index].chan_def.chan;
-#else
-			info.links[0].channel = rwnx_hw->chanctx_table[rwnx_vif->ch_index].chan_def.chan;
-#endif//LINUX_VERSION_CODE < KERNEL_VERSION(6, 0, 0)    
+            struct cfg80211_roam_info info;
+            memset(&info, 0, sizeof(info));
+            
+#if LINUX_VERSION_CODE < HIGH_KERNEL_VERSION
+			if (rwnx_vif->ch_index < NX_CHAN_CTXT_CNT)
+    			info.channel = rwnx_hw->chanctx_table[rwnx_vif->ch_index].chan_def.chan;
+			info.bssid = (const u8 *)ind->bssid.array;
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 0, 0)
-        info.bssid = (const u8 *)ind->bssid.array;
 #else
-        info.links[0].bssid = (const u8 *)ind->bssid.array;;
-#endif//LINUX_VERSION_CODE < KERNEL_VERSION(6, 0, 0)
-        info.req_ie = req_ie;
-        info.req_ie_len = ind->assoc_req_ie_len;
-        info.resp_ie = rsp_ie;
-        info.resp_ie_len = ind->assoc_rsp_ie_len;
-        AICWFDBG(LOGINFO, "%s roaming success to notify roam \r\n", __func__);
-        cfg80211_roamed(dev, &info, GFP_ATOMIC);
+			if (rwnx_vif->ch_index < NX_CHAN_CTXT_CNT)
+    			info.links[0].channel = rwnx_hw->chanctx_table[rwnx_vif->ch_index].chan_def.chan;
+			info.links[0].bssid = (const u8 *)ind->bssid.array;;
+#endif//LINUX_VERSION_CODE < HIGH_KERNEL_VERSION    
+
+            info.req_ie = req_ie;
+            info.req_ie_len = ind->assoc_req_ie_len;
+            info.resp_ie = rsp_ie;
+            info.resp_ie_len = ind->assoc_rsp_ie_len;
+            AICWFDBG(LOGINFO, "%s roaming success to notify roam \r\n", __func__);
+            cfg80211_roamed(dev, &info, GFP_ATOMIC);
 #else
-        chan = ieee80211_get_channel(rwnx_hw->wiphy, ind->center_freq);
-        AICWFDBG(LOGINFO, "%s roaming success to notify roam \r\n", __func__);
-        cfg80211_roamed(dev
+            chan = ieee80211_get_channel(rwnx_hw->wiphy, ind->center_freq);
+            AICWFDBG(LOGINFO, "%s roaming success to notify roam \r\n", __func__);
+            cfg80211_roamed(dev
 #if LINUX_VERSION_CODE > KERNEL_VERSION(2, 6, 39) || defined(COMPAT_KERNEL_RELEASE)
-            , chan
+                , chan
 #endif
-            , (const u8 *)ind->bssid.array
-            , req_ie
-            , ind->assoc_req_ie_len
-            , rsp_ie
-            , ind->assoc_rsp_ie_len
-            , GFP_ATOMIC);
+                , (const u8 *)ind->bssid.array
+                , req_ie
+                , ind->assoc_req_ie_len
+                , rsp_ie
+                , ind->assoc_rsp_ie_len
+                , GFP_ATOMIC);
 #endif /*LINUX_VERSION_CODE >= KERNEL_VERSION(4, 12, 0)*/
-            }
+			rwnx_set_conn_state(&rwnx_vif->drv_conn_state, (int)RWNX_DRV_STATUS_CONNECTED);
+		}
+        rwnx_vif->sta.is_roam = false;
     }
-    netif_tx_start_all_queues(dev);
-    netif_carrier_on(dev);
+
+	if (ind->status_code == 0) {
+	    netif_tx_start_all_queues(dev);
+	    netif_carrier_on(dev);
+	}
+    
+exit:
+    rwnx_vif->sta.is_roam = false;
+#ifdef CONFIG_DYNAMIC_PWR
+	rwnx_hw->sta_rssi_idx = ind->ap_idx;
+#endif
 
     return 0;
 }
 
-#if 0
 void rwnx_cfg80211_unlink_bss(struct rwnx_hw *rwnx_hw, struct rwnx_vif *rwnx_vif){
 	struct wiphy *wiphy = rwnx_hw->wiphy;
 	struct cfg80211_bss *bss = NULL;
@@ -1047,15 +1161,9 @@ void rwnx_cfg80211_unlink_bss(struct rwnx_hw *rwnx_hw, struct rwnx_vif *rwnx_vif
 		cfg80211_put_bss(bss);
 #endif
 	}else{
-		AICWFDBG(LOGERROR, "%s(): cfg80211_unlink error %s!!\n", __func__, rwnx_vif->sta.ssid);
+		AICWFDBG(LOGINFO, "%s(): cfg80211_unlink error %s!!\n", __func__, rwnx_vif->sta.ssid);
 	}
-
-	memset(rwnx_vif->sta.ssid, 0, rwnx_vif->sta.ssid_len);
-	rwnx_vif->sta.ssid_len = 0;
-	memset(rwnx_vif->sta.bssid, 0, ETH_ALEN);
 }
-
-#endif
 
 extern u8 dhcped;
 static inline int rwnx_rx_sm_disconnect_ind(struct rwnx_hw *rwnx_hw,
@@ -1067,11 +1175,17 @@ static inline int rwnx_rx_sm_disconnect_ind(struct rwnx_hw *rwnx_hw,
     struct net_device *dev;
 #ifdef AICWF_RX_REORDER
     struct reord_ctrl_info *reord_info, *tmp;
-    const unsigned char *macaddr;
+    u8 *macaddr;
     struct aicwf_rx_priv *rx_priv;
 #endif
 
-    RWNX_DBG(RWNX_FN_ENTRY_STR);
+    //RWNX_DBG(RWNX_FN_ENTRY_STR);
+    AICWFDBG(LOGINFO, "%s reason code:%d \r\n", __func__, ind->reason_code);
+	if((int)atomic_read(&rwnx_vif->drv_conn_state) == (int)RWNX_DRV_STATUS_DISCONNECTED){
+		AICWFDBG(LOGINFO, "%s, is already disconnected, drop disconnect ind", __func__);
+		return 0;
+	}
+
     dhcped = 0;
 
     if(!rwnx_vif){
@@ -1080,9 +1194,15 @@ static inline int rwnx_rx_sm_disconnect_ind(struct rwnx_hw *rwnx_hw,
         return 0;
     }
     dev = rwnx_vif->ndev;
+	if (rwnx_vif->sta.is_roam == false) {
+		rwnx_cfg80211_unlink_bss(rwnx_hw, rwnx_vif);
+	} else {
+		AICWFDBG(LOGINFO, "%s roaming no rwnx_cfg80211_unlink_bss \r\n", __func__);
+	}
 
-	//rwnx_cfg80211_unlink_bss(rwnx_hw, rwnx_vif);
-
+#ifdef CONFIG_DEBUG_FS
+	rwnx_dbgfs_unregister_rc_stat(rwnx_hw, rwnx_vif->sta.ap);
+#endif
 
 #ifdef CONFIG_BR_SUPPORT
 	struct rwnx_vif *vif = netdev_priv(dev);
@@ -1094,9 +1214,9 @@ static inline int rwnx_rx_sm_disconnect_ind(struct rwnx_hw *rwnx_hw,
         rwnx_hw->is_p2p_connected = 0;
     /* if vif is not up, rwnx_close has already been called */
     if (rwnx_vif->up) {
-        if (!ind->ft_over_ds) {
+        if (!ind->ft_over_ds && !ind->reassoc) {
             cfg80211_disconnected(dev, ind->reason_code, NULL, 0,
-                                  (ind->reason_code <= 1), GFP_ATOMIC);
+                                  (ind->reason_code < 1), GFP_ATOMIC);
         }
         netif_tx_stop_all_queues(dev);
         netif_carrier_off(dev);
@@ -1114,11 +1234,11 @@ static inline int rwnx_rx_sm_disconnect_ind(struct rwnx_hw *rwnx_hw,
     rx_priv = rwnx_hw->usbdev->rx_priv;
 #endif
     if((rwnx_vif->wdev.iftype == NL80211_IFTYPE_STATION) || (rwnx_vif->wdev.iftype == NL80211_IFTYPE_P2P_CLIENT)) {
-        macaddr = rwnx_vif->ndev->dev_addr;
+        macaddr = (u8*)rwnx_vif->ndev->dev_addr;
 		AICWFDBG(LOGINFO, "deinit:macaddr:%x,%x,%x,%x,%x,%x\r\n", macaddr[0],macaddr[1],macaddr[2], \
                                macaddr[3],macaddr[4],macaddr[5]);
         list_for_each_entry_safe(reord_info, tmp, &rx_priv->stas_reord_list, list) {
-            macaddr = rwnx_vif->ndev->dev_addr;
+            macaddr = (u8*)rwnx_vif->ndev->dev_addr;
 			AICWFDBG(LOGINFO, "reord_mac:%x,%x,%x,%x,%x,%x\r\n", reord_info->mac_addr[0],reord_info->mac_addr[1],reord_info->mac_addr[2], \
                                    reord_info->mac_addr[3],reord_info->mac_addr[4],reord_info->mac_addr[5]);
             if (!memcmp(reord_info->mac_addr, macaddr, 6)) {
@@ -1142,7 +1262,10 @@ static inline int rwnx_rx_sm_disconnect_ind(struct rwnx_hw *rwnx_hw,
     rwnx_chanctx_unlink(rwnx_vif);
 
 	//msleep(200);
-	atomic_set(&rwnx_vif->drv_conn_state, (int)RWNX_DRV_STATUS_DISCONNECTED);
+    if (rwnx_vif->sta.is_roam == false) {
+	    rwnx_set_conn_state(&rwnx_vif->drv_conn_state, (int)RWNX_DRV_STATUS_DISCONNECTED);
+    }
+
     return 0;
 }
 
@@ -1156,8 +1279,13 @@ static inline int rwnx_rx_sm_external_auth_required_ind(struct rwnx_hw *rwnx_hw,
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 17, 0) || defined(CONFIG_WPA3_FOR_OLD_KERNEL)
     struct net_device *dev = rwnx_vif->ndev;
     struct cfg80211_external_auth_params params;
+	int ret = 0;
+	struct wireless_dev *wdev = dev->ieee80211_ptr;
+	int retry_counter = 10;
 
     RWNX_DBG(RWNX_FN_ENTRY_STR);
+
+    memset((void*)&params, 0, sizeof(struct cfg80211_external_auth_params));
 
     params.action = NL80211_EXTERNAL_AUTH_START;
     memcpy(params.bssid, ind->bssid.array, ETH_ALEN);
@@ -1166,11 +1294,21 @@ static inline int rwnx_rx_sm_external_auth_required_ind(struct rwnx_hw *rwnx_hw,
            min_t(size_t, ind->ssid.length, sizeof(params.ssid.ssid)));
     params.key_mgmt_suite = ind->akm;
 
+	while (wdev->conn_owner_nlportid == 0) {
+		AICWFDBG(LOGINFO, "%s WARNING conn_owner_nlportid = 0, msleep 100ms.\r\n", __func__);
+		msleep(100);
+		retry_counter--;
+		if (retry_counter == 0) {
+			break;
+		}
+	}
+	AICWFDBG(LOGINFO, "%s wdev->conn_owner_nlportid:%d \r\n", __func__, (int)wdev->conn_owner_nlportid);
+
     if ((ind->vif_idx > NX_VIRT_DEV_MAX) || !rwnx_vif->up ||
         (RWNX_VIF_TYPE(rwnx_vif) != NL80211_IFTYPE_STATION) ||
-        cfg80211_external_auth_request(dev, &params, GFP_ATOMIC)) {
-        wiphy_err(rwnx_hw->wiphy, "Failed to start external auth on vif %d",
-                  ind->vif_idx);
+        (ret = cfg80211_external_auth_request(dev, &params, GFP_ATOMIC))) {
+		wiphy_err(rwnx_hw->wiphy, "Failed to start external auth on vif %d, rwnx_vif->up %d, iftype:%d, ret %d",
+				  ind->vif_idx, rwnx_vif->up, RWNX_VIF_TYPE(rwnx_vif), ret);
         rwnx_send_sm_external_auth_required_rsp(rwnx_hw, rwnx_vif,
                                                 WLAN_STATUS_UNSPECIFIED_FAILURE);
         return 0;
@@ -1456,6 +1594,7 @@ static msg_cb_fct mm_hdlrs[MSG_I(MM_MAX)] = {
     [MSG_I(MM_RSSI_STATUS_IND)]        = rwnx_rx_rssi_status_ind,
     [MSG_I(MM_PKTLOSS_IND)]            = rwnx_rx_pktloss_notify_ind,
     [MSG_I(MM_APM_STALOSS_IND)]        = rwnx_apm_staloss_ind,
+    [MSG_I(MM_RADAR_DETECT_IND)] 	   = rwnx_radar_detect_ind,
 };
 
 static msg_cb_fct scan_hdlrs[MSG_I(SCANU_MAX)] = {

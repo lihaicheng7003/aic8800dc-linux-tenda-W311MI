@@ -6,7 +6,7 @@
 set -eu
 
 PACKAGE_NAME="aic8800dc"
-PACKAGE_VERSION="6.4.3.0-patched.5"
+PACKAGE_VERSION="1.0.13-tenda.1"
 SRC_DIR="/usr/src/${PACKAGE_NAME}-${PACKAGE_VERSION}"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
@@ -52,6 +52,7 @@ echo "[1/5] Installing firmware and udev rules..."
 # create if missing (containers/CI) so cp nests aic8800DC/ instead of its files
 mkdir -p /lib/firmware
 cp -rf "${SCRIPT_DIR}/fw/aic8800DC" /lib/firmware/
+cp -rf "${SCRIPT_DIR}/fw/aic8800D80" /lib/firmware/
 cp "${SCRIPT_DIR}/tools/aic.rules" /etc/udev/rules.d/
 # Reload first so the daemon picks up the new aic.rules, then trigger so
 # already-attached devices re-evaluate against the new rules. Doing it the

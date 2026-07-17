@@ -1,6 +1,7 @@
 Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
 Upstream-Name: aic8800dc-linux-patched
 Source: https://github.com/Kiborgik/aic8800dc-linux-patched
+        https://github.com/SherkeyXD/Tenda-AIC8800DC-Driver
 
 Files: *
 Copyright: AIC Semiconductor and project contributors

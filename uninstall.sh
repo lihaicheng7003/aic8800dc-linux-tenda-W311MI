@@ -77,6 +77,7 @@ fi
 # --- Remove firmware, udev rule, auto-load config ---
 echo "[4/4] Removing firmware and udev rules..."
 rm -rf /lib/firmware/aic8800DC/
+rm -rf /lib/firmware/aic8800D80/
 rm -f /etc/udev/rules.d/aic.rules
 rm -f /etc/modules-load.d/aic8800.conf
 udevadm control --reload
