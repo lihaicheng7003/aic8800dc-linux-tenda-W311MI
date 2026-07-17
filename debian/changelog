@@ -1,9 +1,11 @@
-aic8800dc-tenda-dkms (1:1.0.13+dkms1) unstable; urgency=medium
+aic8800dc-tenda-dkms (1:1.0.13+dkms2) unstable; urgency=medium
 
   * Merge the Tenda 1.0.13 driver and firmware from SherkeyXD.
   * Keep DKMS integration and standard Debian packaging.
   * Add W311MI-specific configuration and AIC8800D80 firmware support.
   * Retain compatibility fixes for current Linux kernels.
+  * Clean stale DKMS versions safely during package upgrades.
+  * Avoid unloading an active cfg80211 interface during upgrades.
 
  -- Li Haicheng <lihaicheng7003@users.noreply.github.com>  Sat, 18 Jul 2026 00:00:00 +0800
 

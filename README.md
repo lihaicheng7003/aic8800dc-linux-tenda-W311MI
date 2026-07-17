@@ -52,6 +52,13 @@ x86_64, kernel `6.17.0-35-generic`. It successfully created a wireless
 interface, scanned access points, connected to a WPA2 network, and
 passed IPv4, IPv6, DNS, and HTTPS connectivity tests.
 
+The merged Tenda 1.0.13 driver was subsequently tested on the same machine
+and adapter. It bound to `2604:0013`, selected the W311 configuration,
+connected through NetworkManager, obtained IPv4 and IPv6 addresses, and
+passed interface-bound IPv4 ping plus IPv4/IPv6 HTTPS tests. The adapter had
+to be connected directly to a host USB port; the intervening KVM/USB hub
+repeatedly failed enumeration with xHCI error `-71` before driver probe.
+
 > This is a community driver, not an official Ubuntu, Tenda, AIC, or
 > mainline Linux kernel driver. Test each kernel and adapter revision
 > before relying on it in production.
@@ -92,12 +99,18 @@ GitHub Releases provide an `all` architecture DKMS package for Debian
 and Ubuntu. Download the package for the release and install it with:
 
 ```bash
-sudo apt install ./aic8800dc-tenda-dkms_1.0.13+dkms1_all.deb
+sudo apt install ./aic8800dc-tenda-dkms_1.0.13+dkms2_all.deb
 ```
 
 The package installs the driver source, firmware, udev rule, and module
 auto-load configuration. Its `postinst` registers the source with DKMS
 and builds the modules for the installed kernel.
+
+Package upgrades replace the files and DKMS registration but deliberately do
+not unload an active module. Reboot after upgrading, or disconnect the adapter
+and unload the modules only after the wireless interface has disappeared.
+Unloading a driver while cfg80211 is tearing down an active interface can
+block network-management processes on affected vendor-driver versions.
 
 The Debian package uses epoch `1:` internally so upgrades from the older
 `6.4.3.0` package are ordered correctly. Debian omits the epoch from the `.deb`
@@ -115,8 +128,8 @@ Release, push a version tag; the release workflow builds the package,
 generates `SHA256SUMS`, and attaches both files to the release:
 
 ```bash
-git tag -a v1.0.13-dkms1 -m 'Release v1.0.13-dkms1'
-git push origin v1.0.13-dkms1
+git tag -a v1.0.13-dkms2 -m 'Release v1.0.13-dkms2'
+git push origin v1.0.13-dkms2
 ```
 
 ## USB mode switching
@@ -229,7 +242,7 @@ For Rockchip, Allwinner, or Amlogic, set the platform variables in
 ## Build for another kernel
 
 ```bash
-sudo dkms build -m aic8800dc -v 1.0.13-tenda.1 -k <other-version>
+sudo dkms build -m aic8800dc -v 1.0.13-tenda.2 -k <other-version>
 dkms status
 ```
 

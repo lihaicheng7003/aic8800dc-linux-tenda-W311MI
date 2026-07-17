@@ -2,9 +2,26 @@
 set -e
 
 MODULE=aic8800dc
-VERSION=1.0.13-tenda.1
+VERSION=1.0.13-tenda.2
 
 if [ "$1" = configure ]; then
+    # dpkg can remove the old /usr/src tree before the new postinst runs.
+    # A stale DKMS entry whose source symlink is then broken makes even
+    # `dkms status` fail, so remove other versions without relying on status.
+    for entry in /var/lib/dkms/$MODULE/*; do
+        [ -d "$entry" ] || [ -L "$entry" ] || continue
+        old_version=${entry##*/}
+        case "$old_version" in
+            "$VERSION"|kernel-*) continue ;;
+        esac
+
+        if [ -f "$entry/source/dkms.conf" ]; then
+            dkms remove -m "$MODULE" -v "$old_version" --all || true
+        else
+            rm -rf "$entry"
+        fi
+    done
+
     if dkms status -m "$MODULE" -v "$VERSION" 2>/dev/null | grep -q .; then
         dkms remove -m "$MODULE" -v "$VERSION" --all || true
     fi
