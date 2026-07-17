@@ -2472,13 +2472,14 @@ int rwnx_patch_table_load(struct rwnx_hw *rwnx_hw, struct aicbt_patch_table *_he
 		for (i = 0; i < p->len; i++) {
 			ret = rwnx_send_dbg_mem_write_req(rwnx_hw, *data, *(data + 1));
 			if (ret != 0)
-				return ret;
+				goto out;
 			data += 2;
 		}
 
 	}
+out:
 	rwnx_patch_table_free(&head);
-	return 0;
+	return ret;
 }
 
 
@@ -2489,10 +2490,12 @@ int rwnx_patch_table_download(struct rwnx_hw *rwnx_hw, char *filename)
     struct aicbt_patch_table *head = NULL;
     struct aicbt_patch_table *new = NULL;
     struct aicbt_patch_table *cur = NULL;
-        int size;
+    int size;
     int ret = 0;
-    uint8_t *rawdata=NULL;
+    uint8_t *rawdata = NULL;
     uint8_t *p = NULL;
+    size_t remaining;
+    size_t data_size;
 
     /* load aic firmware */
     size = rwnx_request_firmware_common(rwnx_hw, (u32 **)&rawdata, filename);
@@ -2500,9 +2503,9 @@ int rwnx_patch_table_download(struct rwnx_hw *rwnx_hw, char *filename)
     /* Copy the file on the Embedded side */
     printk("### Upload %s fw_patch_table, size=%d\n", filename, size);
 
-    if (size <= 0) {
+    if (size < 16) {
         printk("wrong size of firmware file\n");
-        ret = -1;
+        ret = -EINVAL;
         goto err;
     }
 
@@ -2510,15 +2513,25 @@ int rwnx_patch_table_download(struct rwnx_hw *rwnx_hw, char *filename)
 
     if (memcmp(p, AICBT_PT_TAG, sizeof(AICBT_PT_TAG) < 16 ? sizeof(AICBT_PT_TAG) : 16)) {
         printk("TAG err\n");
-        ret = -1;
+        ret = -EINVAL;
         goto err;
     }
     p += 16;
 
     while (p - rawdata < size) {
         printk("size = %d  p - rawdata = 0x%0lx \r\n", size, p - rawdata);
-        new = (struct aicbt_patch_table *)vmalloc(sizeof(struct aicbt_patch_table));
-        memset(new, 0, sizeof(struct aicbt_patch_table));
+        remaining = size - (p - rawdata);
+        if (remaining < 24) {
+            printk("truncated patch table entry header\n");
+            ret = -EINVAL;
+            goto err;
+        }
+
+        new = vzalloc(sizeof(*new));
+        if (!new) {
+            ret = -ENOMEM;
+            goto err;
+        }
         if (head == NULL) {
             head = new;
             cur  = new;
@@ -2527,39 +2540,58 @@ int rwnx_patch_table_download(struct rwnx_hw *rwnx_hw, char *filename)
             cur = cur->next;
         }
 
-        cur->name = (char *)vmalloc(sizeof(char) * 16);
-        memset(cur->name, 0, sizeof(char) * 16);
+        cur->name = vzalloc(16);
+        if (!cur->name) {
+            ret = -ENOMEM;
+            goto err;
+        }
         memcpy(cur->name, p, 16);
         p += 16;
 
-        cur->type = *(uint32_t *)p;
+        memcpy(&cur->type, p, sizeof(cur->type));
         p += 4;
 
-        cur->len = *(uint32_t *)p;
+        memcpy(&cur->len, p, sizeof(cur->len));
         p += 4;
         printk("cur->type %x, len %d\n", cur->type, cur->len);
 
-        if((cur->type )  >= 1000 ) {//Temp Workaround
+        if ((cur->type) >= 1000) { // Temp Workaround
             cur->len = 0;
-        }else{
-            cur->data = (uint32_t *)vmalloc(sizeof(uint8_t) * cur->len * 8);
-            memset(cur->data, 0, sizeof(uint8_t) * cur->len * 8);
-            memcpy(cur->data, p, cur->len * 8);
-            p += cur->len * 8;
+        } else {
+            remaining = size - (p - rawdata);
+            if (cur->len > remaining / 8) {
+                printk("truncated patch table entry data\n");
+                ret = -EINVAL;
+                goto err;
+            }
+
+            data_size = (size_t)cur->len * 8;
+            if (data_size) {
+                cur->data = vmalloc(data_size);
+                if (!cur->data) {
+                    ret = -ENOMEM;
+                    goto err;
+                }
+                memcpy(cur->data, p, data_size);
+                p += data_size;
+            }
         }
     }
 
     vfree(rawdata);
-    rwnx_patch_table_load(rwnx_hw, head);
+    rawdata = NULL;
+    ret = rwnx_patch_table_load(rwnx_hw, head);
+    head = NULL;
+    if (ret)
+        return ret;
     printk("fw_patch_table download complete\n\n");
 
     return ret;
 err:
-    //aicbt_patch_table_free(&head);
+    rwnx_patch_table_free(&head);
 
-    if (rawdata){
+    if (rawdata)
         vfree(rawdata);
-    }
     return ret;
 }
 #endif
@@ -3733,4 +3765,3 @@ void system_config_8800dc(struct rwnx_hw *rwnx_hw){
     }
 
 }
-
