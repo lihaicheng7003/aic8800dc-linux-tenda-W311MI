@@ -290,8 +290,10 @@ ccflags-y += -DNX_TXQ_CNT=4
 endif
 
 # For old kernel (<=3.19)
-ifeq ($(shell test $(VERSION) -lt 4 -a "$(CONFIG_VENDOR_RWNX)" = y ; echo $$?),0)
+ifeq ($(CONFIG_VENDOR_RWNX),y)
+ifneq ($(filter 1 2 3,$(VERSION)),)
 ccflags-y += -DCONFIG_VENDOR_RWNX_VHT_NO80
+endif
 endif
 
 ccflags-$(CONFIG_RX_REORDER) += -DAICWF_RX_REORDER
