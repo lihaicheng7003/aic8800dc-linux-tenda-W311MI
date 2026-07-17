@@ -1,69 +1,46 @@
-# Tenda AX300 W311MI AIC8800DC Linux 驱动
+# Tenda AIC8800DC / AIC8800D80 Linux 驱动
 
 [English](README.md) | [简体中文](README.zh-CN.md)
 
 [![build](https://github.com/lihaicheng7003/aic8800dc-linux-tenda-W311MI/actions/workflows/build.yml/badge.svg)](https://github.com/lihaicheng7003/aic8800dc-linux-tenda-W311MI/actions/workflows/build.yml)
 
-适用于采用 AIC8800DC 和 AIC8800D80 系列芯片的 Tenda USB 无线网卡的
-Linux 外置驱动。本仓库将 SherkeyXD 基于 Tenda 1.0.13 官方驱动整理的驱动与
-固件，同原有 AIC8800DC 社区修补版的 DKMS、Debian 打包、CI 和 Release
-自动化能力合并。
+适用于采用 AIC8800DC 或 AIC8800D80 芯片的 Tenda USB 无线网卡，包括
+AX300 W311MI 和 U11 系列。
 
-项目支持 DKMS，Linux 内核升级后会自动为新内核重新编译驱动模块。
+安装程序使用 DKMS。系统升级内核后，DKMS 会自动为新内核重新编译驱动；安装
+程序还会安装固件和 udev 规则，用于将支持的网卡从虚拟光盘模式切换到 Wi-Fi
+模式。
 
-## 支持的硬件
+> 这是社区维护的驱动，不是 Tenda、AIC、Linux 发行版或主线内核的官方驱动。
+> 用于重要环境前，请先测试实际使用的网卡和内核版本。
 
-部分 Tenda 网卡插入后首先表现为 USB 虚拟光盘。弹出虚拟光盘后，设备会重新
-枚举为无线网卡：
+## 确认网卡型号
 
-| 模式 | USB ID | 说明 |
-| --- | --- | --- |
-| 虚拟光盘模式 | `a69c:5721` | `aicsemi Aic MSC` |
-| Wi-Fi 模式 | `2604:0013` | Tenda AIC8800DC / W311MI |
-| Wi-Fi 模式 | `2604:0014` | Tenda AIC8800DC 变体 |
-| Wi-Fi 模式 | `2604:001f` | Tenda U11 / AIC8800D80 |
-| Wi-Fi 模式 | `2604:0020` | Tenda U11 Pro / AIC8800D80 |
+插入网卡后执行：
 
-这些 Tenda ID 已加入 USB 设备表。驱动 probe 时，`2604:0013` 和
-`2604:0014` 会映射为 `PRODUCT_ID_AIC8800DC`。
+```bash
+lsusb
+```
 
-对于 `2604:0013`，驱动会选择 W311 专用配置
-`aic_userconfig_8800dw_w311.txt`；`2604:0014` 使用对应的 U2 配置。软件包
-同时包含 U11 系列所需的 AIC8800D80 固件。
+本仓库支持以下 USB ID：
 
-## 合并方案
+| USB ID | 状态或型号 |
+| --- | --- |
+| `a69c:5721` | 模式切换前的虚拟光盘 |
+| `2604:0013` | Tenda W311MI / AIC8800DC |
+| `2604:0014` | Tenda AIC8800DC 变体 |
+| `2604:001f` | Tenda U11 / AIC8800D80 |
+| `2604:0020` | Tenda U11 Pro / AIC8800D80 |
 
-- 使用 Tenda 1.0.13 驱动核心、设备表、固件、私有命令、厂商扩展、TCP ACK
-  优化和新内核兼容修复。
-- 为 W311MI 和 U2 使用专用射频配置，而不是把所有 Tenda PID 当作通用
-  AIC8800DC 处理。
-- 使用 DKMS 注册驱动，在发行版安装新内核后自动重新编译模块。
-- 保留标准 debhelper 打包、GitHub Actions 多内核构建、静态分析、Release
-  文件和校验和生成能力。
+网卡刚插入时显示 `a69c:5721` 属于正常现象。安装程序会配置自动模式切换；切换
+完成后，`lsusb` 应显示上表中的某个 `2604:....` ID。
 
-导入的上游 Git 历史使用 `sherkey` remote 管理。后续可先执行
-`git fetch sherkey` 审查上游变化，再决定是否合并。固件为上游提供的二进制
-文件，不能像源代码一样进行完整审计。
-
-## 实机测试
-
-已使用 `2604:0013` 在 Ubuntu 24.04、x86_64、内核
-`6.17.0-35-generic` 上完成测试：
-
-- 成功绑定 `aic8800_fdrv` 并创建 `wlx...` 无线接口。
-- NetworkManager 成功扫描和连接 WPA2 网络。
-- 成功获得 IPv4 和 IPv6 地址。
-- 指定无线接口进行 IPv4 ping，丢包率为 0%。
-- 指定无线接口进行 IPv4 和 IPv6 HTTPS 请求，均返回 HTTP 200。
-- 安装 `dkms2` 软件包时保持现有无线连接，没有主动卸载运行中的模块。
-- 有线 IPv4 默认路由保持不变，无线连接不会自动抢占有线默认入口。
-
-> 本项目是社区驱动，不是 Ubuntu、Tenda、AIC 或 Linux 主线内核的官方组成
-> 部分。用于生产环境前，请测试实际内核版本和网卡硬件版本。
+驱动会自动选择对应的射频配置。其中 `2604:0013` 使用 W311 配置，
+`2604:0014` 使用 U2 配置。
 
 ## 安装
 
-安装依赖：
+### 1. 安装依赖
 
 ```bash
 # Debian / Ubuntu
@@ -73,61 +50,79 @@ sudo apt install git dkms build-essential linux-headers-$(uname -r) eject usb-mo
 sudo pacman -S git dkms linux-headers base-devel eject usb_modeswitch
 
 # Fedora
-sudo dnf install git dkms kernel-devel kernel-headers eject usb_modeswitch
+sudo dnf install git dkms kernel-devel kernel-headers eject usb-modeswitch
 ```
 
-克隆并安装：
-
-```bash
-git clone git@github.com:lihaicheng7003/aic8800dc-linux-tenda-W311MI.git
-cd aic8800dc-linux-tenda-W311MI
-sudo bash ./install.sh
-sudo bash ./test.sh   # 可选的基本检查
-```
-
-没有配置 GitHub SSH 密钥时，可以使用 HTTPS：
+### 2. 下载并安装驱动
 
 ```bash
 git clone https://github.com/lihaicheng7003/aic8800dc-linux-tenda-W311MI.git
+cd aic8800dc-linux-tenda-W311MI
+sudo bash ./install.sh
 ```
 
-### 安装 Debian 软件包
+安装后可以运行仓库自带的基本检查：
 
-GitHub Releases 提供适用于 Debian/Ubuntu 的 `all` 架构 DKMS 软件包：
+```bash
+sudo bash ./test.sh
+```
+
+安装完成后重新插拔网卡。如果旧驱动已经加载，或者无线接口仍未出现，请重启
+系统。
+
+### 使用 Debian / Ubuntu 软件包
+
+除了从源码目录安装，也可以从
+[GitHub Releases](https://github.com/lihaicheng7003/aic8800dc-linux-tenda-W311MI/releases)
+下载 `.deb` 软件包：
 
 ```bash
 sudo apt install ./aic8800dc-tenda-dkms_1.0.13+dkms2_all.deb
 ```
 
-软件包会安装驱动源码、DC/D80 固件、udev 规则和模块自动加载配置。
-`postinst` 会注册 DKMS，并为当前已安装的内核编译模块。
+软件包会安装源码、固件、udev 规则和 DKMS 配置。升级软件包后请重启系统或
+重新插拔网卡；安装程序不会强制卸载正在使用的无线驱动。
 
-升级软件包时会替换源码和 DKMS 注册，但不会主动卸载正在运行的模块。升级后
-建议重启；也可以先拔掉网卡，确认无线接口消失后再手动重新加载模块。在活动
-接口执行 cfg80211 注销期间强行卸载部分厂商驱动，可能阻塞 NetworkManager、
-`ip` 等网络进程。
+## 验证安装结果
 
-Debian 内部版本使用 epoch `1:`，保证新 `1.0.13` 软件包在版本排序上高于旧
-`6.4.3.0` 软件包；epoch 不会出现在 `.deb` 文件名中。
-
-本地构建软件包：
+检查 USB 设备、驱动模块和网络接口：
 
 ```bash
-sudo apt install build-essential debhelper devscripts dkms
-dpkg-buildpackage --no-sign -b
+lsusb
+lsusb -t
+dkms status
+lsmod | grep -E 'aic_load_fw|aic8800_fdrv'
+ip -brief link
 ```
 
-生成的 `.deb` 位于仓库的上一级目录。推送版本标签后，Release workflow 会
-自动构建软件包、生成 `SHA256SUMS` 并上传 Release 文件：
+正常情况下应看到：
+
+- `2604:0013` 等 Wi-Fi USB ID；
+- `lsusb -t` 中的 `Driver=aic8800_fdrv`；
+- 已加载的 `aic_load_fw` 和 `aic8800_fdrv`；
+- 名称为 `wlan0` 或 `wlx...` 的无线接口。
+
+使用 NetworkManager 连接 Wi-Fi：
 
 ```bash
-git tag -a v1.0.13-dkms2 -m 'Release v1.0.13-dkms2'
-git push origin v1.0.13-dkms2
+nmcli device wifi list
+sudo nmcli device wifi connect '你的Wi-Fi名称' password '你的Wi-Fi密码'
+nmcli device status
+ip -brief address
 ```
 
-## USB 模式切换
+如果需要让有线网络继续作为 IPv4 默认路由：
 
-安装程序会添加 udev 规则，自动弹出网卡的虚拟光盘。手动切换命令如下：
+```bash
+sudo nmcli connection modify '你的Wi-Fi名称' ipv4.never-default yes
+sudo nmcli connection up '你的Wi-Fi名称'
+```
+
+## 故障排查
+
+### 网卡仍处于虚拟光盘模式
+
+如果 `lsusb` 仍显示 `a69c:5721`，请手动切换：
 
 ```bash
 sudo usb_modeswitch -KQ -v a69c -p 5721
@@ -135,129 +130,65 @@ sleep 2
 lsusb
 ```
 
-切换成功后，`lsusb` 应显示 `2604:0013` 或 `2604:0014`。
+如果手动切换有效、自动切换无效，请确认已安装 `eject`，并检查
+`tools/aic.rules` 和 udev 日志。
 
-## 验证驱动
+### 已显示 Wi-Fi USB ID，但没有绑定驱动
+
+如果 `lsusb` 显示支持的 `2604:....` ID，而 `lsusb -t` 显示
+`Driver=[none]`，请确认当前模块包含对应的设备 ID：
 
 ```bash
-dkms status
-lsmod | grep -E 'aic|cfg80211'
-modinfo aic8800_fdrv | grep -Ei '2604.*0013|2604.*0014'
+modinfo aic8800_fdrv | grep -Ei '2604.*(0013|0014|001f|0020)'
+```
+
+如果没有输出，系统通常安装了其他版本的 AIC8800 驱动。请重新安装本仓库的
+DKMS 模块并重启。
+
+### Secure Boot 阻止模块加载
+
+Secure Boot 只允许加载由受信任密钥签名的内核模块。请按照发行版的 MOK 流程
+导入 DKMS 签名密钥，或者在适合当前环境的情况下关闭 Secure Boot。签名问题
+通常会在内核日志中显示 `Key was rejected by service`。
+
+### 卸载驱动时网络命令卡住
+
+不要在无线接口仍活动时运行 `modprobe -r aic8800_fdrv`。先断开 Wi-Fi、拔掉
+网卡，并等待 `wlan...` 接口消失后再卸载模块。如果 cfg80211 注销过程已经
+卡住，请重启系统。
+
+### 收集诊断信息
+
+报告问题时请附上以下输出：
+
+```bash
+uname -a
+lsusb
 lsusb -t
-ip -brief link
-nmcli device status
+dkms status
+sudo dmesg | grep -Ei 'aic|firmware|usb|cfg80211' | tail -100
 ```
 
-正常情况下应看到：
+驱动主要在 x86_64 和 arm64 上测试。ARMv7、单核和特殊嵌入式平台可能需要
+额外适配。
 
-- `aic_load_fw` 和 `aic8800_fdrv` 两个模块。
-- USB 拓扑中的 `Driver=aic8800_fdrv`。
-- 名称为 `wlan0` 或 `wlx...` 的无线接口。
+## 更新和卸载
 
-连接 Wi-Fi：
-
-```bash
-nmcli device wifi list
-sudo nmcli device wifi connect 'luolaoshi' password '请替换为实际密码'
-nmcli device status
-```
-
-检查地址、默认路由和网络连通性：
-
-```bash
-ip -brief address
-ip route show default
-ip -6 route show default
-ping -c 3 1.1.1.1
-curl --noproxy '*' -4 -I https://www.cloudflare.com/
-curl --noproxy '*' -6 -I https://www.cloudflare.com/
-```
-
-如果需要保持有线为 IPv4 默认入口，可将无线连接设为不提供默认路由：
-
-```bash
-sudo nmcli connection modify 'luolaoshi' ipv4.never-default yes
-sudo nmcli connection up 'luolaoshi'
-ip route show default
-```
-
-## 更新
-
-以普通用户执行，不要给脚本加 `sudo`：
+请以普通用户运行更新脚本。脚本会在需要时自行执行带权限的安装步骤：
 
 ```bash
 ./update.sh
 ```
 
-脚本会从当前仓库配置的 `origin` 拉取更新并重新安装。更新前可检查 remote：
-
-```bash
-git remote -v
-```
-
-## 卸载
+卸载驱动：
 
 ```bash
 sudo bash ./uninstall.sh
 ```
 
-## 故障排查
-
-### 驱动加载后没有无线接口
-
-首先检查设备是否仍停留在虚拟光盘模式：
-
-```bash
-lsusb
-```
-
-如果显示 `a69c:5721`，执行：
-
-```bash
-sudo apt install usb-modeswitch
-sudo usb_modeswitch -v a69c -p 5721 -KQ
-sleep 2
-lsusb
-ip link show
-sudo dmesg | tail -30
-```
-
-`tools/aic.rules` 中的 udev 规则会调用 `eject` 自动完成该操作。如果没有安装
-`eject`，或者虚拟光盘以 `sr0` 而不是 `sd*` 出现，自动规则可能不生效。
-
-### 已显示 Wi-Fi ID，但没有绑定驱动
-
-如果 `lsusb` 显示 `2604:0013` 或 `2604:0014`，但 `lsusb -t` 显示
-`Driver=[none]`，检查模块 alias：
-
-```bash
-modinfo aic8800_fdrv | grep -Ei '2604.*0013|2604.*0014'
-```
-
-没有输出时，应使用本仓库重新构建 DKMS 模块，而不是安装未包含 Tenda ID 的
-原始上游源码。
-
-### Secure Boot
-
-开启 Secure Boot 时，内核模块必须签名，且签名密钥必须被系统信任。请按照
-发行版的 MOK 注册流程导入 DKMS 密钥，或在适当情况下关闭 Secure Boot。
-
-### 升级或卸载驱动时网络命令阻塞
-
-不要在无线接口仍活动时直接执行 `modprobe -r aic8800_fdrv`。先断开连接并拔掉
-网卡，确认 `wlx...` 接口消失，再卸载模块。若已经出现 cfg80211 内核死锁，
-拔掉网卡可能也无法解除已有的不可中断任务，此时需要重启系统。
-
-### 内核卡住或安装后无法启动
-
-驱动主要面向 x86_64 和 arm64。ARMv7 32 位、单核或特殊嵌入式平台可能在
-固件下载或 USB 初始化期间出现问题。提交问题时请提供串口日志，或提供：
-
-```bash
-sudo journalctl -k -b -1
-```
-
 ## 手动编译
+
+普通安装建议使用 DKMS。开发或测试时可以手动编译：
 
 ```bash
 cd drivers/aic8800
@@ -267,34 +198,31 @@ sudo depmod -a
 sudo modprobe aic_load_fw aic8800_fdrv
 ```
 
-Rockchip、Allwinner 或 Amlogic 平台需要在
-`drivers/aic8800/Makefile` 中设置对应的平台变量。
+Rockchip、Allwinner 和 Amlogic 平台可能需要先修改
+`drivers/aic8800/Makefile` 中的平台变量。
 
-## 为其他内核编译
+通过 DKMS 为另一个已安装的内核编译：
 
 ```bash
 sudo dkms build -m aic8800dc -v 1.0.13-tenda.2 -k <内核版本>
 dkms status
 ```
 
-CI 使用 Linux 6.12 LTS 和 6.19 作为正式门禁，同时将 Arch 当前最新内核作为
-实验性兼容检查。若最新内核引入尚未适配的 API 变化，任务会报告失败细节，但
-不会导致已支持内核的整体 build workflow 失败。
+## 打包和开发
 
-Ubuntu 20.04、内核 5.15 示例：
+在本地构建 Debian 软件包：
 
 ```bash
-sudo apt update
-sudo apt install dkms build-essential linux-headers-$(uname -r) eject usb-modeswitch
-sudo bash ./install.sh
-dkms status
+sudo apt install build-essential debhelper devscripts dkms
+dpkg-buildpackage --no-sign -b
 ```
 
-## 上游来源
+生成的软件包位于仓库的上一级目录。CI 会检查受支持的内核，并将较新的内核
+作为提前发现兼容性问题的参考。
 
-本仓库合并了以下项目的能力：
+本仓库整合了以下项目的工作：
 
-```text
-https://github.com/Kiborgik/aic8800dc-linux-patched
-https://github.com/SherkeyXD/Tenda-AIC8800DC-Driver
-```
+- <https://github.com/Kiborgik/aic8800dc-linux-patched>
+- <https://github.com/SherkeyXD/Tenda-AIC8800DC-Driver>
+
+固件文件来自上游驱动，无法像源代码一样进行完整审计。

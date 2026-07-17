@@ -1,141 +1,131 @@
-# Tenda AX300 W311MI AIC8800DC Linux Driver
+# Tenda AIC8800DC / AIC8800D80 Linux Driver
 
 [English](README.md) | [简体中文](README.zh-CN.md)
 
 [![build](https://github.com/lihaicheng7003/aic8800dc-linux-tenda-W311MI/actions/workflows/build.yml/badge.svg)](https://github.com/lihaicheng7003/aic8800dc-linux-tenda-W311MI/actions/workflows/build.yml)
 
-Out-of-tree Linux driver for Tenda USB Wi-Fi adapters using AIC8800DC and
-AIC8800D80-family chipsets. It combines the Tenda 1.0.13 driver and firmware
-from SherkeyXD with the DKMS, Debian packaging, CI, and release automation
-originally built around the patched AIC8800DC community driver.
+Community Linux driver for Tenda USB Wi-Fi adapters based on the AIC8800DC
+and AIC8800D80 chipsets, including the AX300 W311MI and U11 series.
 
-DKMS support is included so the modules are rebuilt automatically when
-the Linux kernel is upgraded.
+The installer uses DKMS, so the driver is rebuilt automatically after a kernel
+upgrade. It also installs the firmware and a udev rule that switches supported
+adapters from virtual CD-ROM mode to Wi-Fi mode.
 
-## Supported hardware
+> This is not an official Tenda, AIC, distribution, or mainline Linux driver.
+> Test it with your exact adapter and kernel before using it in production.
 
-The Tenda adapter initially appears as a USB mass-storage device and
-changes its USB ID after the virtual disk is ejected:
+## Check your adapter
 
-| Mode | USB ID | Description |
-| --- | --- | --- |
-| Mass-storage mode | `a69c:5721` | `aicsemi Aic MSC` |
-| Wi-Fi mode | `2604:0013` | Tenda AIC8800DC / W311MI |
-| Wi-Fi mode | `2604:0014` | Tenda AIC8800DC variant |
-| Wi-Fi mode | `2604:001f` | Tenda U11 / AIC8800D80 |
-| Wi-Fi mode | `2604:0020` | Tenda U11 Pro / AIC8800D80 |
+Run:
 
-The Tenda IDs are explicitly included in the USB device table and are
-mapped to `PRODUCT_ID_AIC8800DC` during probe.
+```bash
+lsusb
+```
 
-For `2604:0013`, the driver selects the W311-specific
-`aic_userconfig_8800dw_w311.txt`; `2604:0014` uses the corresponding U2
-configuration. The package also carries the D80 firmware needed by the U11
-variants.
+This repository supports the following USB IDs:
 
-## Combined design
+| USB ID | State or model |
+| --- | --- |
+| `a69c:5721` | Virtual CD-ROM mode before switching |
+| `2604:0013` | Tenda W311MI / AIC8800DC |
+| `2604:0014` | Tenda AIC8800DC variant |
+| `2604:001f` | Tenda U11 / AIC8800D80 |
+| `2604:0020` | Tenda U11 Pro / AIC8800D80 |
 
-- Tenda 1.0.13 driver core, device tables, firmware, private commands, vendor
-  extensions, TCP ACK optimization, and current-kernel compatibility changes.
-- Dedicated W311MI and U2 radio configuration instead of treating every Tenda
-  PID as a generic AIC8800DC device.
-- DKMS registration so modules are rebuilt when a distribution installs a new
-  kernel.
-- Standard debhelper packaging, reproducible GitHub Actions builds, static
-  analysis, release artifacts, and checksums.
+Seeing `a69c:5721` is normal immediately after plugging in the adapter. The
+installer configures automatic mode switching. After the switch, `lsusb`
+should show one of the `2604:....` IDs above.
 
-The imported driver is maintained as an upstream Git history named `sherkey`;
-future upstream updates can be reviewed with `git fetch sherkey` before they
-are merged. Firmware binaries are redistributed from the upstream driver and
-cannot be audited like source code.
-
-This fork was installed and tested with `2604:0013` on Ubuntu 24.04,
-x86_64, kernel `6.17.0-35-generic`. It successfully created a wireless
-interface, scanned access points, connected to a WPA2 network, and
-passed IPv4, IPv6, DNS, and HTTPS connectivity tests.
-
-The merged Tenda 1.0.13 driver was subsequently tested on the same machine
-and adapter. It bound to `2604:0013`, selected the W311 configuration,
-connected through NetworkManager, obtained IPv4 and IPv6 addresses, and
-passed interface-bound IPv4 ping plus IPv4/IPv6 HTTPS tests.
-
-> This is a community driver, not an official Ubuntu, Tenda, AIC, or
-> mainline Linux kernel driver. Test each kernel and adapter revision
-> before relying on it in production.
+Device-specific radio configuration is selected automatically. In particular,
+`2604:0013` uses the W311 configuration and `2604:0014` uses the U2
+configuration.
 
 ## Install
 
-Install dependencies:
+### 1. Install dependencies
 
 ```bash
 # Debian / Ubuntu
 sudo apt install git dkms build-essential linux-headers-$(uname -r) eject usb-modeswitch
 
-# Arch
+# Arch Linux
 sudo pacman -S git dkms linux-headers base-devel eject usb_modeswitch
 
 # Fedora
 sudo dnf install git dkms kernel-devel kernel-headers eject usb_modeswitch
 ```
 
-Clone and install:
-
-```bash
-git clone git@github.com:lihaicheng7003/aic8800dc-linux-tenda-W311MI.git
-cd aic8800dc-linux-tenda-W311MI
-sudo bash ./install.sh
-sudo bash ./test.sh   # optional sanity check
-```
-
-If SSH access to GitHub is not configured, clone over HTTPS instead:
+### 2. Download and install the driver
 
 ```bash
 git clone https://github.com/lihaicheng7003/aic8800dc-linux-tenda-W311MI.git
+cd aic8800dc-linux-tenda-W311MI
+sudo bash ./install.sh
 ```
 
-### Install the Debian package
+Optionally run the included sanity check:
 
-GitHub Releases provide an `all` architecture DKMS package for Debian
-and Ubuntu. Download the package for the release and install it with:
+```bash
+sudo bash ./test.sh
+```
+
+Unplug and reconnect the adapter after installation. Reboot if the old module
+is already loaded or the wireless interface does not appear.
+
+### Debian / Ubuntu package
+
+As an alternative to installing from the source tree, download the `.deb` from
+[GitHub Releases](https://github.com/lihaicheng7003/aic8800dc-linux-tenda-W311MI/releases)
+and install it with:
 
 ```bash
 sudo apt install ./aic8800dc-tenda-dkms_1.0.13+dkms2_all.deb
 ```
 
-The package installs the driver source, firmware, udev rule, and module
-auto-load configuration. Its `postinst` registers the source with DKMS
-and builds the modules for the installed kernel.
+The package installs the source, firmware, udev rule, and DKMS configuration.
+After upgrading the package, reboot or reconnect the adapter. The package does
+not forcibly unload an active wireless driver.
 
-Package upgrades replace the files and DKMS registration but deliberately do
-not unload an active module. Reboot after upgrading, or disconnect the adapter
-and unload the modules only after the wireless interface has disappeared.
-Unloading a driver while cfg80211 is tearing down an active interface can
-block network-management processes on affected vendor-driver versions.
+## Verify the installation
 
-The Debian package uses epoch `1:` internally so upgrades from the older
-`6.4.3.0` package are ordered correctly. Debian omits the epoch from the `.deb`
-filename.
-
-Build the package locally with:
+Check the device, modules, and network interface:
 
 ```bash
-sudo apt install build-essential debhelper devscripts dkms
-dpkg-buildpackage --no-sign -b
+lsusb
+lsusb -t
+dkms status
+lsmod | grep -E 'aic_load_fw|aic8800_fdrv'
+ip -brief link
 ```
 
-The `.deb` is written to the parent directory. To create a GitHub
-Release, push a version tag; the release workflow builds the package,
-generates `SHA256SUMS`, and attaches both files to the release:
+A working installation normally shows:
+
+- a Wi-Fi USB ID such as `2604:0013`;
+- `Driver=aic8800_fdrv` in `lsusb -t`;
+- both `aic_load_fw` and `aic8800_fdrv` loaded; and
+- a wireless interface named `wlan0` or `wlx...`.
+
+Connect using NetworkManager:
 
 ```bash
-git tag -a v1.0.13-dkms2 -m 'Release v1.0.13-dkms2'
-git push origin v1.0.13-dkms2
+nmcli device wifi list
+sudo nmcli device wifi connect 'YOUR_SSID' password 'YOUR_PASSWORD'
+nmcli device status
+ip -brief address
 ```
 
-## USB mode switching
+If Ethernet should remain the default IPv4 route:
 
-The installer adds a udev rule that ejects the adapter's virtual disk.
-To switch it manually:
+```bash
+sudo nmcli connection modify 'YOUR_SSID' ipv4.never-default yes
+sudo nmcli connection up 'YOUR_SSID'
+```
+
+## Troubleshooting
+
+### The adapter remains in CD-ROM mode
+
+If `lsusb` still shows `a69c:5721`, switch it manually:
 
 ```bash
 sudo usb_modeswitch -KQ -v a69c -p 5721
@@ -143,115 +133,67 @@ sleep 2
 lsusb
 ```
 
-After switching, `lsusb` should report `2604:0013` or `2604:0014`.
+If this works manually but not automatically, confirm that `eject` is
+installed and inspect `tools/aic.rules` and the udev logs.
 
-## Verify
+### A Wi-Fi USB ID appears, but no driver is attached
+
+If `lsusb` shows a supported `2604:....` ID while `lsusb -t` shows
+`Driver=[none]`, confirm that the installed module contains the device alias:
 
 ```bash
-dkms status
-lsmod | grep -E 'aic|cfg80211'
-modinfo aic8800_fdrv | grep -Ei '2604.*0013|2604.*0014'
+modinfo aic8800_fdrv | grep -Ei '2604.*(0013|0014|001f|0020)'
+```
+
+No output usually means a different AIC8800 driver is installed. Reinstall the
+DKMS module from this repository and reboot.
+
+### Secure Boot blocks the module
+
+Secure Boot only loads kernel modules signed by a trusted key. Enroll the DKMS
+signing key through your distribution's MOK process, or disable Secure Boot if
+that is appropriate for your system. Kernel logs usually contain `Key was
+rejected by service` when signing is the problem.
+
+### Network commands hang while unloading the driver
+
+Do not run `modprobe -r aic8800_fdrv` while its interface is active. Disconnect
+Wi-Fi, unplug the adapter, and wait for the `wlan...` interface to disappear
+before unloading modules. Reboot if cfg80211 teardown is already stuck.
+
+### Collect diagnostic information
+
+Include the following output when reporting a problem:
+
+```bash
+uname -a
+lsusb
 lsusb -t
-ip -brief link
-nmcli device status
+dkms status
+sudo dmesg | grep -Ei 'aic|firmware|usb|cfg80211' | tail -100
 ```
 
-A working installation should show both `aic_load_fw` and
-`aic8800_fdrv`, `Driver=aic8800_fdrv` in the USB tree, and a `wlan0` or
-`wlx...` network interface.
+The driver is primarily tested on x86_64 and arm64. ARMv7, single-core, and
+unusual embedded platforms may require additional platform work.
 
-Connect with NetworkManager and inspect routing:
+## Update or uninstall
 
-```bash
-nmcli device wifi list
-sudo nmcli device wifi connect 'your-ssid' password 'your-password'
-ip -brief address
-ip route show default
-ip -6 route show default
-```
-
-To keep Ethernet as the IPv4 default path:
-
-```bash
-sudo nmcli connection modify 'your-ssid' ipv4.never-default yes
-sudo nmcli connection up 'your-ssid'
-```
-
-## Update
-
-`git pull` and reinstall in one step. Run it as the normal user, not
-with `sudo`:
+Run the update script as your normal user; it invokes privileged installation
+steps when needed:
 
 ```bash
 ./update.sh
 ```
 
-The script pulls from the repository's configured `origin`. Confirm the
-remote before updating:
-
-```bash
-git remote -v
-```
-
-## Uninstall
+To uninstall:
 
 ```bash
 sudo bash ./uninstall.sh
 ```
 
-## Troubleshooting
+## Build manually
 
-### Driver loads but no wireless interface appears
-
-First check whether the dongle is still in USB mass-storage mode
-(`a69c:5721`). The udev rule in `tools/aic.rules` runs `eject` to flip
-it into Wi-Fi mode. If `eject` is not installed or the dongle
-enumerates as a CD-ROM (`sr0` instead of `sd*`), switch it manually:
-
-```bash
-sudo apt install usb-modeswitch
-sudo usb_modeswitch -v a69c -p 5721 -KQ
-sleep 2
-lsusb
-ip link show
-dmesg | tail -30
-```
-
-### Wi-Fi mode is visible but no driver is bound
-
-If `lsusb` shows `2604:0013` or `2604:0014` but `lsusb -t` shows
-`Driver=[none]`, verify that the installed module contains the Tenda
-aliases:
-
-```bash
-modinfo aic8800_fdrv | grep -Ei '2604.*0013|2604.*0014'
-```
-
-If no alias is printed, rebuild and reinstall the DKMS module from this
-fork rather than an unmodified upstream source tree.
-
-### Network commands block while removing the driver
-
-Do not run `modprobe -r aic8800_fdrv` while its wireless interface is active.
-Disconnect and physically remove the adapter, confirm the `wlx...` interface
-has disappeared, and only then unload the modules. If cfg80211 teardown is
-already deadlocked, removing the adapter may not release existing
-uninterruptible tasks and a reboot will be required.
-
-### Secure Boot
-
-The kernel modules must be signed and their key trusted for Secure Boot
-to load them. Follow the distribution's MOK (Machine Owner Key)
-enrollment procedure, or disable Secure Boot where appropriate.
-
-### Kernel hang or no boot after install
-
-The base driver is tested on x86_64 and arm64. Untested platforms such
-as ARMv7 32-bit, single-core, or unusual embedded boards may hang during
-firmware download or USB enumeration. Capture logs over a serial
-console or with `journalctl -k -b -1` when reporting an issue.
-
-## Manual build
+DKMS is recommended for normal installations. For development or testing:
 
 ```bash
 cd drivers/aic8800
@@ -261,26 +203,32 @@ sudo depmod -a
 sudo modprobe aic_load_fw aic8800_fdrv
 ```
 
-For Rockchip, Allwinner, or Amlogic, set the platform variables in
-`drivers/aic8800/Makefile` before building.
+Rockchip, Allwinner, and Amlogic builds may require platform variables in
+`drivers/aic8800/Makefile`.
 
-## Build for another kernel
+To build through DKMS for another installed kernel:
 
 ```bash
-sudo dkms build -m aic8800dc -v 1.0.13-tenda.2 -k <other-version>
+sudo dkms build -m aic8800dc -v 1.0.13-tenda.2 -k <kernel-version>
 dkms status
 ```
 
-CI gates releases on Linux 6.12 LTS and 6.19. The current Arch kernel is also
-built as an experimental compatibility signal; failures caused by unreleased
-or newly changed kernel APIs are reported without failing the supported-kernel
-build gate.
+## Packaging and development
 
-## Upstream
+Build a Debian package locally with:
 
-This repository combines:
-
-```text
-https://github.com/Kiborgik/aic8800dc-linux-patched
-https://github.com/SherkeyXD/Tenda-AIC8800DC-Driver
+```bash
+sudo apt install build-essential debhelper devscripts dkms
+dpkg-buildpackage --no-sign -b
 ```
+
+The package is written to the parent directory. CI checks supported kernels and
+also tests newer kernels as an early compatibility signal.
+
+This repository combines work from:
+
+- <https://github.com/Kiborgik/aic8800dc-linux-patched>
+- <https://github.com/SherkeyXD/Tenda-AIC8800DC-Driver>
+
+Firmware files are redistributed from the upstream driver and cannot be
+audited in the same way as source code.
