@@ -57,11 +57,9 @@ endif
 
 ###########################################
 
-MAKEFLAGS +=-j$(shell nproc)
-
 all: modules
 modules:
-	make -C $(KDIR) M=$(PWD) ARCH=$(ARCH) CROSS_COMPILE=$(CROSS_COMPILE) modules
+	+$(MAKE) -C $(KDIR) M=$(PWD) ARCH=$(ARCH) CROSS_COMPILE=$(CROSS_COMPILE) modules
 
 install:
 	mkdir -p $(MODDESTDIR)
@@ -75,6 +73,6 @@ uninstall:
 	/sbin/depmod -a ${KVER}
 
 clean:
-	cd aic_load_fw/;make clean;cd ..
-	cd aic8800_fdrv/;make clean;cd ..
+	+$(MAKE) -C aic_load_fw clean
+	+$(MAKE) -C aic8800_fdrv clean
 	rm -rf modules.order Module.symvers .modules.order.cmd .Module.symvers.cmd .tmp_versions/

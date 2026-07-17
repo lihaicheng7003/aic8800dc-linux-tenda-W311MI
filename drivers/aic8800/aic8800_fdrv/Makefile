@@ -341,8 +341,6 @@ ccflags-$(CONFIG_TEMP_COMP) += -DCONFIG_TEMP_COMP
 ccflags-$(CONFIG_POWER_LIMIT) += -DCONFIG_POWER_LIMIT
 ccflags-$(CONFIG_EXT_FEM_8800DCDW) += -DCONFIG_EXT_FEM_8800DCDW
 ccflags-$(CONFIG_WOWLAN) += -DCONFIG_WOWLAN
-MAKEFLAGS +=-j$(shell nproc)
-
 # Platform support list
 CONFIG_PLATFORM_ROCKCHIP ?= n
 CONFIG_PLATFORM_ALLWINNER ?= n
@@ -407,4 +405,3 @@ uninstall:
 
 clean:
 	rm -rf *.o *.ko *.o.* *.mod.* modules.* Module.* .a* .o* .*.o.* *.mod .tmp* .cache.mk .modules.order.cmd .Module.symvers.cmd
-
