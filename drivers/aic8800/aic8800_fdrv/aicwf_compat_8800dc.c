@@ -2607,10 +2607,11 @@ rf_misc_ram_lite_t loft_res_local;
 int aicwf_patch_table_load(struct rwnx_hw *rwnx_hw, char *filename)
 {
     int err = 0;
-    unsigned int i = 0, size;
+	int size;
+    unsigned int i;
    	u32 *dst = NULL;
 	u8 *describle;
-	u32 fmacfw_patch_tbl_8800dc_u02_describe_size = 124;
+	const u32 fmacfw_patch_tbl_8800dc_u02_describe_size = 124;
 	u32 fmacfw_patch_tbl_8800dc_u02_describe_base;//read from patch_tbl
 
     /* Copy the file on the Embedded side */
@@ -2621,10 +2622,10 @@ int aicwf_patch_table_load(struct rwnx_hw *rwnx_hw, char *filename)
        AICWFDBG(LOGERROR, "No such file or directory\n");
        return -1;
     }
-    if (size <= 0) {
-            AICWFDBG(LOGERROR, "wrong size of firmware file\n");
-            dst = NULL;
-            err = -1;
+    if (size < 128 || (size - 128) % 8) {
+        AICWFDBG(LOGERROR, "invalid firmware patch table size: %d\n", size);
+        err = -EINVAL;
+        goto out;
     }
 
 	AICWFDBG(LOGINFO, "tbl size = %d \n",size);
@@ -2632,29 +2633,34 @@ int aicwf_patch_table_load(struct rwnx_hw *rwnx_hw, char *filename)
 	fmacfw_patch_tbl_8800dc_u02_describe_base = dst[0];
 	AICWFDBG(LOGINFO, "FMACFW_PATCH_TBL_8800DC_U02_DESCRIBE_BASE = %x \n",fmacfw_patch_tbl_8800dc_u02_describe_base);
 
-	if (!err && (i < size)) {
-		err = rwnx_send_dbg_mem_block_write_req(rwnx_hw, fmacfw_patch_tbl_8800dc_u02_describe_base, fmacfw_patch_tbl_8800dc_u02_describe_size + 4, dst);
-		if(err){
-			printk("write describe information fail \n");
-		}
-
-		describle = kzalloc(fmacfw_patch_tbl_8800dc_u02_describe_size, GFP_KERNEL);
-		memcpy(describle, &dst[1], fmacfw_patch_tbl_8800dc_u02_describe_size);
-		AICWFDBG(LOGINFO, "%s", describle);
-		kfree(describle);
-		describle = NULL;
+	err = rwnx_send_dbg_mem_block_write_req(rwnx_hw,
+		fmacfw_patch_tbl_8800dc_u02_describe_base,
+		fmacfw_patch_tbl_8800dc_u02_describe_size + 4, dst);
+	if (err) {
+		AICWFDBG(LOGERROR, "write describe information fail: %d\n", err);
+		goto out;
 	}
 
-    if (!err && (i < size)) {
-        for (i =(128/4); i < (size/4); i +=2) {
+	describle = kzalloc(fmacfw_patch_tbl_8800dc_u02_describe_size + 1,
+		GFP_KERNEL);
+	if (!describle) {
+		err = -ENOMEM;
+		goto out;
+	}
+	memcpy(describle, &dst[1], fmacfw_patch_tbl_8800dc_u02_describe_size);
+	AICWFDBG(LOGINFO, "%s", describle);
+	kfree(describle);
+
+    for (i = 128 / 4; i + 1 < size / 4; i += 2) {
             AICWFDBG(LOGERROR, "patch_tbl:  %x  %x\n", dst[i], dst[i+1]);
             err = rwnx_send_dbg_mem_write_req(rwnx_hw, dst[i], dst[i+1]);
-        }
         if (err) {
             AICWFDBG(LOGERROR, "bin upload fail: %x, err:%d\r\n", dst[i], err);
+            break;
         }
     }
 
+out:
     if (dst) {
         rwnx_release_firmware_common(&dst);
     }
