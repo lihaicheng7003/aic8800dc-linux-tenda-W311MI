@@ -1276,9 +1276,9 @@ static void rwnx_rx_add_rtap_hdr(struct rwnx_hw* rwnx_hw,
         pos++;
 
         // bandwidth
-        if (rxvect->ch_bw == PHY_CHNL_BW_40)
-            *pos++ = 1;
-        if (rxvect->ch_bw == PHY_CHNL_BW_80)
+		if (rxvect->ch_bw == PHY_CHNL_BW_40)
+			*pos++ = 1;
+		else if (rxvect->ch_bw == PHY_CHNL_BW_80)
             *pos++ = 4;
         else if ((rxvect->ch_bw == PHY_CHNL_BW_160)
                 && phy_info->phy_center2_freq)
