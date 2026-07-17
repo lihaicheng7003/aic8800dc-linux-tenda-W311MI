@@ -410,3 +410,13 @@ debian/aic8800dc-tenda-dkms/
 debian/aic8800dc-tenda-dkms.substvars
 debian/debhelper-build-stamp
 debian/files
+# Linux kernel module build products
+*.o
+*.o.cmd
+*.ko
+*.ko.cmd
+*.mod
+*.mod.c
+*.mod.cmd
+Module.symvers
+modules.order
