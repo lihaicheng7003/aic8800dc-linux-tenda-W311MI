@@ -1,6 +1,6 @@
 # Tenda AX300 W311MI AIC8800DC Linux Driver
 
-[![build](https://github.com/lihaicheng7003/aic8800dc-linux-tenda-W311MI-/actions/workflows/build.yml/badge.svg)](https://github.com/lihaicheng7003/aic8800dc-linux-tenda-W311MI-/actions/workflows/build.yml)
+[![build](https://github.com/lihaicheng7003/aic8800dc-linux-tenda-W311MI/actions/workflows/build.yml/badge.svg)](https://github.com/lihaicheng7003/aic8800dc-linux-tenda-W311MI/actions/workflows/build.yml)
 
 Out-of-tree Linux driver for the Tenda AX300 W311MI USB Wi-Fi adapter
 using the AIC8800DC chipset. This fork is based on the AIC8800DC
@@ -51,8 +51,8 @@ sudo dnf install git dkms kernel-devel kernel-headers eject usb_modeswitch
 Clone and install:
 
 ```bash
-git clone git@github.com:lihaicheng7003/aic8800dc-linux-tenda-W311MI-.git
-cd aic8800dc-linux-tenda-W311MI-
+git clone git@github.com:lihaicheng7003/aic8800dc-linux-tenda-W311MI.git
+cd aic8800dc-linux-tenda-W311MI
 sudo bash ./install.sh
 sudo bash ./test.sh   # optional sanity check
 ```
@@ -60,7 +60,7 @@ sudo bash ./test.sh   # optional sanity check
 If SSH access to GitHub is not configured, clone over HTTPS instead:
 
 ```bash
-git clone https://github.com/lihaicheng7003/aic8800dc-linux-tenda-W311MI-.git
+git clone https://github.com/lihaicheng7003/aic8800dc-linux-tenda-W311MI.git
 ```
 
 ## USB mode switching
