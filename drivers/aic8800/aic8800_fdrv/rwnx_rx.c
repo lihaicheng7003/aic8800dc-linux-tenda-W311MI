@@ -2320,10 +2320,16 @@ u8 rwnx_rxdataind_aicwf(struct rwnx_hw *rwnx_hw, void *hostid, void *rx_priv)
 
                 //Reset original skb->data pointer
                 skb->data = (void*) hw_rxhdr;
+				if (!skb_monitor) {
+					dev_kfree_skb(skb);
+					goto end;
+				}
             }
         } else {
         #ifdef CONFIG_RWNX_MON_DATA
         skb_monitor = skb_copy_expand(skb, rtap_len, 0, GFP_ATOMIC);
+		if (!skb_monitor)
+			goto check_len_update;
         skb_monitor->data += (msdu_offset + 2); //sdio/usb word allign
 
         //Save frame length
