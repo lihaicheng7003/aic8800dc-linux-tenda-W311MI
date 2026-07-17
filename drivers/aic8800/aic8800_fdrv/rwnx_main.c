@@ -8541,7 +8541,8 @@ int rwnx_cfg80211_init(struct rwnx_plat *rwnx_plat, void **platform_data)
     struct rwnx_vif *vif;
     int i;
     u8 dflt_mac[ETH_ALEN] = { 0x88, 0x00, 0x33, 0x77, 0x10, 0x99};
-    struct mm_get_fw_version_cfm fw_version;
+    struct mm_get_fw_version_cfm fw_version = {};
+    size_t fw_version_len;
     u8_l mac_addr_efuse[ETH_ALEN];
     u8 mac_addr[ETH_ALEN];
 #ifndef USE_5G
@@ -8717,9 +8718,17 @@ if((g_rwnx_plat->usbdev->chipid == PRODUCT_ID_AIC8801) ||
 	AICWFDBG(LOGINFO, "is 5g support = %d, vendor_info = 0x%02X\n", set_start_cfm.is_5g_support, set_start_cfm.vendor_info);
 	rwnx_hw->band_5g_support = set_start_cfm.is_5g_support;
 
-        ret = rwnx_send_get_fw_version_req(rwnx_hw, &fw_version);
-        memcpy(wiphy->fw_version, fw_version.fw_version, fw_version.fw_version_len>32? 32 : fw_version.fw_version_len>32);
-    	AICWFDBG(LOGINFO, "Firmware Version: %s\r\n", fw_version.fw_version);
+	ret = rwnx_send_get_fw_version_req(rwnx_hw, &fw_version);
+	if (ret)
+		goto err_lmac_reqs;
+
+	fw_version_len = min_t(size_t, fw_version.fw_version_len,
+			       sizeof(fw_version.fw_version));
+	fw_version_len = min_t(size_t, fw_version_len,
+			       sizeof(wiphy->fw_version) - 1);
+	memcpy(wiphy->fw_version, fw_version.fw_version, fw_version_len);
+	wiphy->fw_version[fw_version_len] = '\0';
+	AICWFDBG(LOGINFO, "Firmware Version: %s\r\n", wiphy->fw_version);
 
     wiphy->bands[NL80211_BAND_2GHZ] = &rwnx_band_2GHz;
 //#ifdef USE_5G
