@@ -67,21 +67,42 @@ jobs:
             dkms build -m "$PACKAGE_NAME" -v "$PACKAGE_VERSION" -k "$kver"
           '
 
-  ubuntu-20-04-kernel-5-15:
+  ubuntu-kernels:
     runs-on: ubuntu-latest
-    name: Ubuntu 20.04 / 5.15 HWE
+    name: ${{ matrix.name }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Ubuntu 20.04 / 5.4 GA
+            image: ubuntu:20.04
+            headers: linux-headers-generic
+            pattern: 5.4.0-*-generic
+          - name: Ubuntu 22.04 / 5.15 GA
+            image: ubuntu:22.04
+            headers: linux-headers-generic
+            pattern: 5.15.0-*-generic
+          - name: Ubuntu 24.04 / 6.8 GA
+            image: ubuntu:24.04
+            headers: linux-headers-generic
+            pattern: 6.8.0-*-generic
     steps:
       - uses: actions/checkout@v7
       - name: dkms build
+        env:
+          IMAGE: ${{ matrix.image }}
+          HEADERS: ${{ matrix.headers }}
+          KVER_PATTERN: ${{ matrix.pattern }}
         run: |
-          docker run --rm -v "$PWD:/src:ro" ubuntu:20.04 bash -c '
+          docker run --rm \
+            -e HEADERS -e KVER_PATTERN -v "$PWD:/src:ro" "$IMAGE" bash -c '
             set -e
             export DEBIAN_FRONTEND=noninteractive
             apt-get update
             apt-get install -y --no-install-recommends \
-              build-essential dkms linux-headers-generic-hwe-20.04
+              build-essential dkms "$HEADERS"
             kver=$(find /lib/modules -mindepth 1 -maxdepth 1 -type d \
-              -name "5.15.0-*-generic" -printf "%f\n" | sort -V | tail -1)
+              -name "$KVER_PATTERN" -printf "%f\n" | sort -V | tail -1)
             test -n "$kver"
             test -e "/lib/modules/$kver/build/Makefile"
             . /src/dkms.conf
