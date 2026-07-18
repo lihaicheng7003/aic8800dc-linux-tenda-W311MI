@@ -6,7 +6,7 @@
 set -eu
 
 PACKAGE_NAME="aic8800dc"
-PACKAGE_VERSION="1.0.13-tenda.3"
+PACKAGE_VERSION="1.0.13-tenda.4"
 SRC_DIR="/usr/src/${PACKAGE_NAME}-${PACKAGE_VERSION}"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 

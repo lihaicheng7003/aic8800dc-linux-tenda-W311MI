@@ -77,7 +77,7 @@ sudo bash ./test.sh
 下载 `.deb` 软件包：
 
 ```bash
-sudo apt install ./aic8800dc-tenda-dkms_1.0.13+dkms3_all.deb
+sudo apt install ./aic8800dc-tenda-dkms_1.0.13+dkms4_all.deb
 ```
 
 软件包会安装源码、固件、udev 规则和 DKMS 配置。升级软件包后请重启系统或
@@ -204,7 +204,7 @@ Rockchip、Allwinner 和 Amlogic 平台可能需要先修改
 通过 DKMS 为另一个已安装的内核编译：
 
 ```bash
-sudo dkms build -m aic8800dc -v 1.0.13-tenda.3 -k <内核版本>
+sudo dkms build -m aic8800dc -v 1.0.13-tenda.4 -k <内核版本>
 dkms status
 ```
 
