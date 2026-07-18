@@ -79,7 +79,7 @@ As an alternative to installing from the source tree, download the `.deb` from
 and install it with:
 
 ```bash
-sudo apt install ./aic8800dc-tenda-dkms_1.0.13+dkms2_all.deb
+sudo apt install ./aic8800dc-tenda-dkms_1.0.13+dkms3_all.deb
 ```
 
 The package installs the source, firmware, udev rule, and DKMS configuration.
@@ -209,7 +209,7 @@ Rockchip, Allwinner, and Amlogic builds may require platform variables in
 To build through DKMS for another installed kernel:
 
 ```bash
-sudo dkms build -m aic8800dc -v 1.0.13-tenda.2 -k <kernel-version>
+sudo dkms build -m aic8800dc -v 1.0.13-tenda.3 -k <kernel-version>
 dkms status
 ```
 
