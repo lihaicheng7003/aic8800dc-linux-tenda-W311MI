@@ -12,6 +12,16 @@
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 14, 0)
 
+static ssize_t aic_nla_strscpy(char *dst, const struct nlattr *nla,
+			       size_t dstsize)
+{
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
+	return nla_strscpy(dst, nla, dstsize);
+#else
+	return nla_strlcpy(dst, nla, dstsize) >= dstsize ? -E2BIG : 0;
+#endif
+}
+
 static struct wifi_ring_buffer_status ring_buffer[] = {
 	{
 		.name            = "aicwf_ring_buffer0",
@@ -508,7 +518,7 @@ static int aicwf_vendor_logger_start_logging(struct wiphy *wiphy, struct wireles
 			break;
 		case LOGGER_ATTRIBUTE_RING_NAME:
 			if (ring_name_set ||
-			    nla_strscpy(rb.name, iter, sizeof(rb.name)) < 0)
+			    aic_nla_strscpy(rb.name, iter, sizeof(rb.name)) < 0)
 				return -EINVAL;
 			ring_name_set = true;
 			break;
@@ -549,7 +559,7 @@ static int aicwf_vendor_logger_get_ring_data(struct wiphy *wiphy, struct wireles
 		switch (type) {
 		case LOGGER_ATTRIBUTE_RING_NAME:
 			if (ring_name_set ||
-			    nla_strscpy(rb.name, iter, sizeof(rb.name)) < 0)
+			    aic_nla_strscpy(rb.name, iter, sizeof(rb.name)) < 0)
 				return -EINVAL;
 			ring_name_set = true;
 			break;
