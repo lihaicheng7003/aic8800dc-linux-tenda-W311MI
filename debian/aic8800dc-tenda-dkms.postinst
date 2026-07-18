@@ -27,7 +27,26 @@ if [ "$1" = configure ]; then
     fi
 
     dkms add -m "$MODULE" -v "$VERSION"
-    dkms autoinstall -m "$MODULE" -v "$VERSION"
+
+    # `dkms autoinstall` does not consistently cover every installed kernel.
+    # In particular, Ubuntu's DKMS 3.0.11 can select only the running 6.x
+    # kernel when a newer 7.x kernel is already installed.  Since the upgrade
+    # above removes the old registration, that would also discard a module
+    # which had already been built for the kernel selected at the next boot.
+    # Build for every installed kernel that has usable headers instead.
+    built_kernel=false
+    for build_dir in /lib/modules/*/build; do
+        [ -e "$build_dir" ] || continue
+        kernel=${build_dir#/lib/modules/}
+        kernel=${kernel%/build}
+        dkms autoinstall -m "$MODULE" -v "$VERSION" -k "$kernel"
+        built_kernel=true
+    done
+
+    if [ "$built_kernel" = false ]; then
+        echo "No installed kernel headers found under /lib/modules/*/build" >&2
+        exit 1
+    fi
     depmod -a
 
     if command -v udevadm >/dev/null 2>&1; then

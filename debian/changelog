@@ -1,3 +1,10 @@
+aic8800dc-tenda-dkms (1:1.0.13+dkms5) unstable; urgency=medium
+
+  * Rebuild DKMS modules for every installed kernel with headers during
+    package upgrades, including an installed Linux 7.x kernel not yet booted.
+
+ -- Li Haicheng <lihaicheng7003@users.noreply.github.com>  Sat, 18 Jul 2026 19:15:00 +0800
+
 aic8800dc-tenda-dkms (1:1.0.13+dkms4) unstable; urgency=medium
 
   * Restore compatibility with Ubuntu 20.04's Linux 5.4 netlink API.
