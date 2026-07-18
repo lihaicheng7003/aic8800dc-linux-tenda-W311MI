@@ -37,6 +37,25 @@
 #endif
 
 /* CFG80211 */
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(7, 1, 0)
+#define RWNX_CFG80211_WDEV_PARAM(name) struct wireless_dev *name
+#define RWNX_CFG80211_WDEV_NETDEV(name) ((name)->netdev)
+#define RWNX_CFG80211_VIF_WDEV(vif) (&(vif)->wdev)
+#define RWNX_TDLS_DISCOVER_RESP(mgmt) ((mgmt)->u.action.tdls_discover_resp)
+#define RWNX_TDLS_ACTION_CODE(mgmt) ((mgmt)->u.action.action_code)
+#define RWNX_TDLS_DISCOVER_RESP_LEN(mgmt) \
+    (2 + sizeof(RWNX_TDLS_DISCOVER_RESP(mgmt)))
+#else
+#define RWNX_CFG80211_WDEV_PARAM(name) struct net_device *name
+#define RWNX_CFG80211_WDEV_NETDEV(name) (name)
+#define RWNX_CFG80211_VIF_WDEV(vif) ((vif)->ndev)
+#define RWNX_TDLS_DISCOVER_RESP(mgmt) ((mgmt)->u.action.u.tdls_discover_resp)
+#define RWNX_TDLS_ACTION_CODE(mgmt) \
+    (RWNX_TDLS_DISCOVER_RESP(mgmt).action_code)
+#define RWNX_TDLS_DISCOVER_RESP_LEN(mgmt) \
+    (1 + sizeof(RWNX_TDLS_DISCOVER_RESP(mgmt)))
+#endif
+
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 20, 0)
 #define IEEE80211_HE_MAC_CAP3_MAX_AMPDU_LEN_EXP_MASK IEEE80211_HE_MAC_CAP3_MAX_A_AMPDU_LEN_EXP_MASK
 #endif
